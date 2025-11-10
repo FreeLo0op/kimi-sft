@@ -1,3 +1,4 @@
+import sys
 from torch.utils.data import Dataset
 from functools import lru_cache
 import torch
@@ -52,13 +53,13 @@ class LazySupervisedDataset(Dataset):
         #     continous_feature.shape[2] * 4,
         # )
         return wav
-    
+
     def _tokenize_text(self, text):
         if text is None:
             return None
         token_ids = self.text_tokenizer.encode(text, bos=False, eos=False)
         return token_ids
-    
+
     def tokenize_message(
         self,
         message,
@@ -69,7 +70,6 @@ class LazySupervisedDataset(Dataset):
         output_type: str = "text",
     ):
         kimia_content_msg = KimiAContent()
-
         role = message["role"]
         has_loss = role == "assistant"
         if tokenize_role:
@@ -89,7 +89,6 @@ class LazySupervisedDataset(Dataset):
             text_tokens = self._tokenize_text(text)
             if len(text_tokens) > self.max_len // 2:
                 text_tokens = text_tokens[:self.max_len // 2]
-            # print('DEBUG text_tokens: {} max_len: {}'.format(len(text_tokens), self.max_len))
 
             kimia_content_msg.text_extend(text_tokens, has_loss)
             kimia_content_msg.audio_extend(
@@ -192,7 +191,6 @@ class LazySupervisedDataset(Dataset):
                 output_type=output_type,
             )
             msgs.append(msg)
-
         if add_assistant_start_msg:
             assistant_start_msg = self.tokenize_message(
                 message=
@@ -246,7 +244,7 @@ class LazySupervisedDataset(Dataset):
         )
 
         return ret
-    
+
     def collate_fn(self, batch):
         if not batch:
             return {}
@@ -307,5 +305,4 @@ class LazySupervisedDataset(Dataset):
                 torch.stack(text_loss_mask_batch),
             ),
         )
-        
-        
+

@@ -149,13 +149,13 @@ def compute_loss(outputs, labels, num_items_in_batch=None):
     audio_labels, text_labels, audio_loss_mask, text_loss_mask = labels
     # text_labels, text_loss_mask = labels
 
-    audio_loss = torch.nn.functional.cross_entropy(audio_logits.view(-1, audio_logits.shape[-1]), audio_labels.view(-1), reduction="none")
+    # audio_loss = torch.nn.functional.cross_entropy(audio_logits.view(-1, audio_logits.shape[-1]), audio_labels.view(-1), reduction="none")
     text_loss = torch.nn.functional.cross_entropy(text_logits.view(-1, text_logits.shape[-1]), text_labels.view(-1), reduction="none")
 
-    audio_loss = (audio_loss * audio_loss_mask.view(-1)).sum() / (audio_loss_mask.view(-1).sum() + 1e-4)
+    # audio_loss = (audio_loss * audio_loss_mask.view(-1)).sum() / (audio_loss_mask.view(-1).sum() + 1e-4)
     text_loss = (text_loss * text_loss_mask.view(-1)).sum() / (text_loss_mask.view(-1).sum() + 1e-4)
-    loss = audio_loss + text_loss
-    # loss = text_loss
+    # loss = audio_loss + text_loss
+    loss = text_loss
     return loss
 
 def train():

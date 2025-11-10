@@ -543,7 +543,7 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
 
     def __init__(self, config: KimiAudioConfig):
         super().__init__(config)
-        self.skip_audio_transformer = False
+        self.skip_audio_transformer = True
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.kimia_mimo_transformer_from_layer_index = (
@@ -553,21 +553,18 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.hidden_size, self.padding_idx
         )
-        if self.skip_audio_transformer:
-            num_layers_to_load = self.kimia_mimo_transformer_from_layer_index + 1  # 0-21，共22层
-        else:
-            num_layers_to_load = config.num_hidden_layers  # 共28层
-            
         self.layers = nn.ModuleList(
-            [MoonshotDecoderLayer(config) for _ in range(num_layers_to_load)]
+            [MoonshotDecoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         # extra 1B audio transformers
-        self.mimo_layers = nn.ModuleList(
-            [MoonshotDecoderLayer(config) for _ in range(config.kimia_mimo_layers)]
-        )
-        self.mimo_norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if not self.skip_audio_transformer:
+            self.mimo_layers = nn.ModuleList(
+                [MoonshotDecoderLayer(config) for _ in range(config.kimia_mimo_layers)]
+            )
+            self.mimo_norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
         self.use_whisper_feature = config.use_whisper_feature
         if self.use_whisper_feature:
             self.vq_adaptor = VQAdaptor(config)
@@ -716,9 +713,11 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
                             whisper_input_feature_i = whisper_input_feature_i.unsqueeze(0)
 
                         # 与 mask 对齐的健壮性：取三者最小值，避免越界
+                        current_mask = is_continuous_mask[batch_idx, start_idx+1:end_idx]
+                        current_mask_length = current_mask.sum().int()
                         target_len = min(
                             int(feat_len),
-                            int(is_continuous_mask[batch_idx].sum()),
+                            int(current_mask_length),
                             int(whisper_input_feature_i.shape[0]),
                         )
                         if target_len > 0:
@@ -790,43 +789,45 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
             if idx == self.kimia_mimo_transformer_from_layer_index:
                 mimo_hidden_states = hidden_states.clone()
                 # skip the rest of the audio transformer layers
-                if self.skip_audio_transformer:
-                    break
+
         # skip the audio transformer layers so no need to norm the hidden states
-        # hidden_states = self.norm(hidden_states)
+        hidden_states = self.norm(hidden_states)
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
         # apply MIMO transformer layers for text generation
-        for idx, decoder_layer in enumerate(self.mimo_layers):
+        if self.skip_audio_transformer:
+            pass
+        else:
+            for idx, decoder_layer in enumerate(self.mimo_layers):
+                if output_hidden_states:
+                    all_hidden_states += (mimo_hidden_states,)
+
+                past_key_value = (
+                    past_key_values[idx + len(self.layers)]
+                    if past_key_values is not None
+                    else None
+                )
+                layer_outputs = decoder_layer(
+                    mimo_hidden_states,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_value,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    padding_mask=padding_mask,
+                )
+
+                mimo_hidden_states = layer_outputs[0]
+
+                if use_cache:
+                    next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
+
+            mimo_hidden_states = self.mimo_norm(mimo_hidden_states)
+
+            # add hidden states from the last decoder layer
             if output_hidden_states:
                 all_hidden_states += (mimo_hidden_states,)
-
-            past_key_value = (
-                past_key_values[idx + len(self.layers)]
-                if past_key_values is not None
-                else None
-            )
-            layer_outputs = decoder_layer(
-                mimo_hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                padding_mask=padding_mask,
-            )
-
-            mimo_hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
-
-        mimo_hidden_states = self.mimo_norm(mimo_hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (mimo_hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
@@ -849,7 +850,6 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
 
 class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight", "mimo_output.weight"]
@@ -945,16 +945,17 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
             # mimo_hidden_states = outputs[0]
 
         audio_logits = self.lm_head(hidden_states)
-        text_logits = self.mimo_output(mimo_hidden_states)
+        # text_logits = self.mimo_output(mimo_hidden_states)
+        text_logits = audio_logits
 
         if not return_dict:
             output = (text_logits, audio_logits) + outputs[2:]
-            # output = (text_logits,) + outputs[2:]
+            # output = (audio_logits,) + outputs[2:]
             return output
         return CausalLMOutputWithPast(
             loss=None,
             logits=(text_logits, audio_logits),
-            # logits=(text_logits,),
+            # logits=(audio_logits,),
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,

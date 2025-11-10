@@ -1,7 +1,7 @@
 #!/bin/bash
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 DIR=`pwd`
-
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 # Guide:
 # This script supports distributed training on multi-gpu workers (as well as single-worker training).
 # Please set the options below according to the comments.
@@ -46,12 +46,13 @@ fi
 
 MODEL="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B" # Set the path if you do not want to load from huggingface directly
 
-PRETRAINED_MODEL_PATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/Base_Model/Base_Model_v1.2/checkpoint-12000"
+PRETRAINED_MODEL_PATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/Kimi_Pa_V2_ckpt55000"
 
 # ATTENTION: specify the path to your training data, which should be a json file consisting of a list of conversations.
 # See the section for finetuning in README for more information.
 DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/sft_train_semantic_codes.json"
-DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/eval/sft_eval_semantic_codes.json"
+DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/eval/sft_eval_semantic_codes.json"
+# DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/eval/sft_eval_semantic_codes.json"
 output_dir="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/Kimi_test_2"
 batch_size=4
 model_max_length=512
@@ -70,11 +71,11 @@ DISTRIBUTED_ARGS="
 echo "start finetune"
 echo "DISTRIBUTED_ARGS: $DISTRIBUTED_ARGS"
 
+cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
 torchrun $DISTRIBUTED_ARGS finetune.py \
     --model_name_or_path $MODEL \
     --model_path $PRETRAINED_MODEL_PATH \
     --train_data_path $DATA_TRAIN \
-    --eval_data_path $DATA_EVAL \
     --eval_ratio 0.05 \
     --bf16 True \
     --output_dir $output_dir \
@@ -92,7 +93,7 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --adam_beta2 0.95 \
     --warmup_ratio 0.2 \
     --lr_scheduler_type "cosine" \
-    --logging_steps 10 \
+    --logging_steps 5 \
     --report_to "tensorboard" \
     --model_max_length $model_max_length \
     --gradient_checkpointing True \
