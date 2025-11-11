@@ -22,17 +22,16 @@ if [ "$convert" == "true" ]; then
         --input_dir $input_dir \
         --output_dir $output_dir
     echo "Model conversion completed."
-else
-    echo "Skipping model conversion."
-    cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/Kimi-Audio-batch
-    cpkt='55000'
-    infer_prompt='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/sft/test/ket_asr_cotv1_test.json'
-    model_path=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/Kimi_Pa_V2_ckpt${cpkt}
-    output_path=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/Kimi_Pa_V2_ckpt${cpkt}/test_results.json
-    gpu_id=7
-    CUDA_VISIBLE_DEVICES="$gpu_id" python infer.py \
-        --model_path "$model_path" \
-        --infer_prompt "$infer_prompt" \
-        --output_path "$output_path" \
-        --gpu_id "0"
 fi
+
+echo "Skipping model conversion."
+cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
+infer_prompt='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/base_model_test_dataset/test_dataset.json'
+model_path=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/Kimi_test_2_infer
+output_path=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/Kimi_test_2_infer/asr_test_results.json
+gpu_id=6
+CUDA_VISIBLE_DEVICES="$gpu_id" python infer.py \
+    --model_path "$model_path" \
+    --infer_prompt "$infer_prompt" \
+    --output_path "$output_path" \
+    --gpu_id "0"

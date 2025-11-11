@@ -26,6 +26,7 @@ def prompt_loader(prompt_path:str) -> list:
             messages = item["messages"]
             system_content = messages[0]["content"]
             user_content = messages[1]["content"]
+            user_content = user_content.replace("<audio>", "").strip()
             infer_content = f"{system_content}{user_content}"
 
             label = item["messages"][2]["content"]
@@ -36,7 +37,7 @@ def prompt_loader(prompt_path:str) -> list:
             # single_messages.append({"role": "user", "message_type": "audio-text", "content": [audio, infer_content]})
             single_messages.append({"role": "assistant_gt", "message_type": "text", "content": label})
             infer_messages.append(single_messages)
-    return infer_messages[:1]
+    return infer_messages
 
 def main(
         infer_prompt:str,
@@ -46,7 +47,8 @@ def main(
     ):
     infer_messages = prompt_loader(infer_prompt)
     model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:{gpu_id}')
-    infer_res = []
+    # infer_res = []
+    fo = open(output_path, "w", encoding="utf-8")
     for i in tqdm(range(len(infer_messages)), desc="Inference", disable=False):
         messages = infer_messages[i][:-1]
         label = infer_messages[i][-1]["content"]
@@ -56,16 +58,18 @@ def main(
         _, text = model.generate(messages, **sampling_params, output_type="text")
         # wav, text = model.generate(messages, **sampling_params, output_type="both")
 
-        infer_res.append({
+        infer_res = {
             "prompt": messages[0]["content"],
             "audio": audio,
             "label": label,
             "predict": text,
-        })
-    
-    with open(output_path, "w", encoding="utf-8") as fo:
-        for line in infer_res:
-            fo.write(json.dumps(line, ensure_ascii=False) + "\n")
+        }
+        fo.write(json.dumps(infer_res, ensure_ascii=False) + "\n")
+        fo.flush()
+    fo.close()
+    # with open(output_path, "w", encoding="utf-8") as fo:
+    #     for line in infer_res:
+    #         fo.write(json.dumps(line, ensure_ascii=False) + "\n")
 
 if __name__ == "__main__":
     argparse = argparse.ArgumentParser()
