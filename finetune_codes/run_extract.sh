@@ -14,8 +14,9 @@ fi
 INPUT_FILE=${1:-"input.json"}
 OUTPUT_FILE=${2:-"output.json"}
 BATCH_SIZE=${3:-32}
-NUM_PROCESSES=${4:-4}
+NUM_PROCESSES=${4:-8}
 GPU_IDS=${5:-"0,1,2,3"}  # 默认使用GPU 0,1,2,3
+GPU_IDS=${5:-"0,1,2,3,4,5,6,7"}  # 默认使用GPU 0-7
 
 if [ "$OUTPUT_FILE" == "output.json" ]; then
     echo "使用默认输出路径"

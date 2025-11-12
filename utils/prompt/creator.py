@@ -150,61 +150,40 @@ def main_sft(
         # 对齐
         'next-online-10k_align_cotv2_train.json', 'ertonggushi_align_cotv1_train.json',
         # 音素评测
-        'speechocean762_phoneme_pa_cotv2_train.json', 'tal-k12_phoneme_pa_nocot-v1_train.json',
+        'speechocean762_phoneme_pa_cotv2_train.json', 
+        'tal-k12_phoneme_recommend_cotv2_train.json',
+        'tal-k12_phoneme_pa_nocot-v1_train.json',
         # 单词评测
         'speechocean762_word_pa_accuracy_nocot-v2_train.json', 'speechocean762_word_pa_stress_nocot-v2_train.json', 'speechocean762_word_pa_total_nocot-v2_train.json', 'tal-k12_word_pa_accuracy_nocot-v2_train.json', 'xiaoheiban_word_pa_accuracy_nocotv3_train.json',
         # 句子评测
         'speechocean762_sent_pa_accuracy_nocot-v2_train.json', 'speechocean762_sent_pa_fluency_nocotv1_train.json', 'speechocean762_sent_pa_prosodic_nocot-v2_train.json', 'speechocean762_sent_pa_total_nocot-v2_train.json', 'tal-k12_sent_pa_accuracy_nocot-v2_train.json', 'next_sent_pa_fluency_nocotv1_train.json', 'xiaohou_sent_pa_accuracy_nocotv3_train.json',
         # 音素、单词、句子三维评测
         'tal-k12_full_pa_llmgt_cotv1_train.json',
-        # 开放场景评测
-        'open_pa_v3_train.json',
         # 连读检测
         'ldtrain_liaison_detection_nocotv1_train.json',
         # 多句多选
         'bdy_wx_0506_multiple_choice_cotv1_train.json',
         # 重复读检测
-        'wangxiao-online-20250527_repeat_reading_cotv1_train_10k.json',
+        'wangxiao-online-20250527_repeat_reading_cotv1_train.json',
         # 识别
-        'LibriSpeech_asr_cotv1_train.json', 'ertonggushi_asr_cotv1_train.json'
+        'librispeech_asr_cotv1_train.json', 'ertonggushi_asr_cotv1_train.json',
+        # KET
+        # 'ket_pa_v1_train.json',
+        # 学习机半开放题
+        # 'xxj_compare_v2_train.json'
     ]
 
-    eval_root_dir = '/mnt/pfs_l2/jieti_team/SFT/hupeng/mdd_lm/data/multi_task/sft/eval'
-    eval_ori_prompts = [
-        # 对齐
-        'next-online-10k_align_cotv2_eval.json', 'ertonggushi_align_cotv1_eval.json',
-        # 音素评测
-        'speechocean762_phoneme_pa_cotv2_eval.json', 'tal-k12_phoneme_pa_nocot-v1_eval.json',
-        # 单词评测
-        'speechocean762_word_pa_accuracy_nocot-v2_eval.json', 'speechocean762_word_pa_stress_nocot-v2_eval.json', 'speechocean762_word_pa_total_nocot-v2_eval.json', 'tal-k12_word_pa_accuracy_nocot-v2_eval.json', 'xiaoheiban_word_pa_accuracy_nocotv3_eval.json',
-        # 句子评测
-        'speechocean762_sent_pa_accuracy_nocot-v2_eval.json', 'speechocean762_sent_pa_fluency_nocotv1_eval.json', 'speechocean762_sent_pa_prosodic_nocot-v2_eval.json', 'speechocean762_sent_pa_total_nocot-v2_eval.json', 'tal-k12_sent_pa_accuracy_nocot-v2_eval.json', 'next_sent_pa_fluency_nocotv1_eval.json', 'xiaohou_sent_pa_accuracy_nocotv3_eval.json',
-        # 音素、单词、句子三维评测
-        'tal-k12_full_pa_llmgt_cotv1_eval.json',
-        # 开放场景评测
-        'open_pa_v3_eval.json',
-        # 连读检测
-        'ldtrain_liaison_detection_nocotv1_eval.json',
-        # 多句多选
-        'bdy_wx_0506_multiple_choice_cotv1_eval.json',
-        # 重复读检测
-        'wangxiao-online-20250527_repeat_reading_cotv1_eval.json',
-        # 识别
-        'LibriSpeech_asr_cotv1_eval.json', 'ertonggushi_asr_cotv1_eval.json'
-    ]
+    eval_root_dir = '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/sft/eval'
 
     if dataset_type == 'train':
         root_dir = train_root_dir
         ori_prompts = train_ori_prompts
     elif dataset_type == 'eval':
         root_dir = eval_root_dir
-        ori_prompts = eval_ori_prompts
-    
+        ori_prompts = [item.replace('train.json', 'eval.json') for item in train_ori_prompts]
+
     new_prompts = []
     for ori_prompt in ori_prompts:
-        # 临时测试
-        # if 'LibriSpeech_asr' not in ori_prompt:
-        #     continue
         prompt_path = os.path.join(root_dir, ori_prompt)
         if not os.path.exists(prompt_path):
             logger.warning(f"File not found: {prompt_path}")
@@ -223,11 +202,6 @@ def main_sft(
                         new_prompts.append(new_prompt)
                         count += 1
 
-            # for old_prompt in tqdm(old_prompts, total=len(old_prompts), desc=f'Processing : {ori_prompt}'):
-            #     new_prompt = prompt_convert(old_prompt, {})
-            #     if new_prompt:
-            #         new_prompts.append(new_prompt)
-            #         count += 1
         logger.info(f"Processed {count}/{len(old_prompts)} valid prompts from {ori_prompt}, {len(old_prompts)-count} invalid prompts are removed.")
 
     save_root = os.path.dirname(save_path)
@@ -238,16 +212,16 @@ def main_sft(
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
 if __name__ == "__main__":
-    # main_sft(
-    #     dataset_type='train',
-    #     save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/sft_train.json'
-    # )
-    # main_sft(
-    #     dataset_type='eval',
-    #     save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/eval/sft_eval.json'
-    # )
-
-    main_base(
-        dataset_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/base_model_v4/eval',
-        save_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/base/dev/single_datasets'
+    main_sft(
+        dataset_type='train',
+        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/sft_train.json'
     )
+    main_sft(
+        dataset_type='eval',
+        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/sft_eval.json'
+    )
+
+    # main_base(
+    #     dataset_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/base_model_v4/eval',
+    #     save_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/base/dev/single_datasets'
+    # )

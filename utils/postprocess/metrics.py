@@ -1,10 +1,13 @@
 import os
+import re
 import json
 import numpy as np
 import Levenshtein
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score, classification_report, confusion_matrix
+from tn.english.normalizer import Normalizer as EN_Normalizer 
 import warnings
 warnings.filterwarnings("ignore")
+en_tn_model = EN_Normalizer(overwrite_cache=False)
 
 def align_accuracy(align_label_pred, align_label_true, threshold:int=120, logger=None):
     """
@@ -112,10 +115,6 @@ def pcc_compute(true_list:list, pred_list:list, dataset_name:str=None, logger=No
     if logger:
         logger.log_metric_result("PCC", pcc, dataset_name)
         try:
-            logger.info("分类报告:")
-            for line in classification_report(true_list, pred_list).splitlines():
-                logger.info(line)
-
             logger.info("混淆矩阵:")
             cm = confusion_matrix(true_list, pred_list)
             for line in np.array2string(cm).splitlines():
@@ -178,19 +177,19 @@ def cal_hit_rate(gt_scores, pred_scores, threshold_gt=6, threshold_pred=60, logg
 
 
 def wer(label, predict):
-    """
-    计算字错率
-    
-    参数:
-        label: 真实标签
-        predict: 预测结果
-    
-    返回:
-        float: 字错率
-    """
-    distance = Levenshtein.distance(' '.join(label), ' '.join(predict))
+    # 去除标点符号
+    label = text_normalize(label)
+    predict = text_normalize(predict)
+
+    # distance = Levenshtein.distance(' '.join(label), ' '.join(predict))
+    distance = Levenshtein.distance(label, predict)
     wer_score = distance / len(label) if len(label) > 0 else 0
+    wer_score = 1 if wer_score > 1 else wer_score  # 防止异常值
+    if wer_score > 0.3:
+        # print(f"高字错率警告: {wer_score:.2f}\n真实: {' '.join(label)} \n预测: {' '.join(predict)}")
+        pass
     return wer_score
+
 
 
 def mse(true_list:list, pred_list:list, dataset_name:str=None, logger=None):
@@ -222,3 +221,18 @@ def acc_with_threshold(true_list:list, pred_list:list, dataset_name:str=None, th
         print(f"Accuracy (threshold = {threshold}) : {acc:.2f}")
     return acc
 
+def text_normalize(text):
+        if isinstance(text, list):
+            text = ' '.join(text)
+        # print('原始文本:', text)
+        text = text.strip()
+        text = text.lower()
+        text = en_tn_model.normalize(text)
+        text = re.sub(r'[。，、！？：；“”‘’（）【】《》—\,\.\?\!\[\]\\\(\)\'\-]', ' ', text)
+        # 中文字符前后加空格
+        text = re.sub(r'([\u4e00-\u9fa5])', r' \1 ', text)
+        # 多个空格合并为一个
+        text = re.sub(r' +', ' ', text)
+        text = re.sub(r'\n', '', text)
+        # print('处理后文本:', text)
+        return text.split()

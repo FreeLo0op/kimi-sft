@@ -78,9 +78,9 @@ def single_main(infer_res_file:str, task_type:str, log_file:str=None, clear_log:
         case 'phoneme_pa':
             get_phoneme_pa_res(lines, logger)
         case 'word_pa':
-            get_word_pa_res(lines, 'accuracy', logger)  # Default to 'accuracy' for word_pa
+            get_word_pa_res(lines, 'accuracy', 'tal-k12', logger)  # Default to 'accuracy' for word_pa
         case 'sent_pa':
-            get_snt_pa_res(lines, logger)
+            get_snt_pa_res(lines, 'tal-k12', logger)
         case 'liaison':
             get_liaison_res(lines, logger)
         case 'multiple_choice':
@@ -91,6 +91,10 @@ def single_main(infer_res_file:str, task_type:str, log_file:str=None, clear_log:
             get_asr_res(lines, logger)
         case 'open_pa':
             get_open_pa_res(lines, 'open_pa', logger)
+        case 'full_pa':
+            get_full_pa_res(lines, 'full_pa', logger)
+        case 'ket_pa':
+            get_ket_pa_res(lines, 'ket_pa', logger)
         case _:
             logger.error(f"Unknown task type: {task_type}")
     pass
@@ -104,9 +108,12 @@ if __name__ == "__main__":
     #     log_file='evaluation.log', 
     #     clear_log=True
     # )
+
+    infer_res_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/Kimi_Pa_V2_ckpt70000/infer_res/infer_tal-k12_sent_pa_accuracy_nocot-v2_test.json'
+    log_file = os.path.join(os.path.dirname(infer_res_file), 'evaluation.log')
     single_main(
-        infer_res_file='/mnt/pfs_l2/jieti_team/SFT/hupeng/github/Kimi-Audio/output/infer_res/Kimi_Pa_V1.1/infer_LibriSpeech_asr_cotv1_test.json',
-        task_type='asr',
-        log_file='single_evaluation.log',
-        clear_log=True
+        infer_res_file=infer_res_file,
+        task_type='sent_pa',
+        log_file=log_file,
+        clear_log=False
     )

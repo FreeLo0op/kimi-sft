@@ -1,19 +1,21 @@
-speechocean762_phoneme_pa_cotv2_test.json
-tal-k12_phoneme_pa_nocot-v1_test.json
+#speechocean762_phoneme_pa_cotv2_test.json
+#tal-k12_phoneme_pa_nocot-v1_test.json
 
-speechocean762_word_pa_accuracy_nocot-v2_test.json
-speechocean762_word_pa_stress_nocot-v2_test.json
-speechocean762_word_pa_total_nocot-v2_test.json
-tal-k12_word_pa_accuracy_nocot-v2_test.json
-xiaoheiban_word_pa_accuracy_nocotv3_test.json
+#speechocean762_word_pa_accuracy_nocot-v2_test.json
+#speechocean762_word_pa_stress_nocot-v2_test.json
+#speechocean762_word_pa_total_nocot-v2_test.json
+#tal-k12_word_pa_accuracy_nocot-v2_test.json
+#xiaoheiban_word_pa_accuracy_nocotv3_test.json
 
-speechocean762_sent_pa_accuracy_nocot-v2_test.json
-speechocean762_sent_pa_fluency_nocotv1_test.json
-speechocean762_sent_pa_prosodic_nocot-v2_test.json
-speechocean762_sent_pa_total_nocot-v2_test.json
-tal-k12_sent_pa_accuracy_nocot-v2_test.json
-next_sent_pa_fluency_nocotv1_test.json
-sent_acc_test_sent_pa_accuracy_nocotv2_test.json
+#speechocean762_sent_pa_accuracy_nocot-v2_test.json
+#speechocean762_sent_pa_fluency_nocotv1_test.json
+#speechocean762_sent_pa_prosodic_nocot-v2_test.json
+#speechocean762_sent_pa_total_nocot-v2_test.json
+#tal-k12_sent_pa_accuracy_nocot-v2_test.json
+#next_sent_pa_fluency_nocotv1_test.json
+#sent_acc_test_sent_pa_accuracy_nocotv2_test.json
 
-tal-k12-td1_full_pa_cotv1_test.json
-tal-k12-td2_full_pa_cotv1_test.json
+#tal-k12-td1_full_pa_cotv1_test.json
+#tal-k12-td2_full_pa_cotv1_test.json
+
+ket_pa_v1_test.json

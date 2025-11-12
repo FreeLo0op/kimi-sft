@@ -689,7 +689,9 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
                     whisper_dtype = whisper_input_feature[0].dtype
                     expanded_whisper = (
                         torch.zeros(
-                            audio_emb.shape[0], audio_emb.shape[1], whisper_input_dim
+                            audio_emb.shape[0], 
+                            audio_emb.shape[1], 
+                            whisper_input_dim
                         )
                         .to(device)
                         .to(whisper_dtype)
@@ -726,7 +728,6 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
                                 start_idx + 1 : start_idx + 1 + target_len,
                                 :,
                             ] = whisper_input_feature_i[:target_len, :]
-
                     whisper_emb = self.vq_adaptor(
                         expanded_whisper.transpose(0, 1)
                     ).transpose(0, 1)
@@ -750,11 +751,9 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
             else:
                 inputs_embeds = audio_emb
         # embed positions
-        # TODO kill attention_mask for prefill
+        # todo kill attention_mask for prefill
         padding_mask = attention_mask
-
         hidden_states = inputs_embeds
-
         # decoder layers
         # print(f"DEBUG output_hidden_states: {output_hidden_states}")
         all_hidden_states = () if output_hidden_states else None
@@ -788,14 +787,11 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
 
             if idx == self.kimia_mimo_transformer_from_layer_index:
                 mimo_hidden_states = hidden_states.clone()
-                # skip the rest of the audio transformer layers
 
-        # skip the audio transformer layers so no need to norm the hidden states
         hidden_states = self.norm(hidden_states)
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        # apply MIMO transformer layers for text generation
         if self.skip_audio_transformer:
             pass
         else:

@@ -2,11 +2,7 @@
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 DIR=`pwd`
 export CUDA_VISIBLE_DEVICES=0,1,2,3
-# Guide:
-# This script supports distributed training on multi-gpu workers (as well as single-worker training).
-# Please set the options below according to the comments.
-# For multi-gpu workers training, these options should be manually set for each worker.
-# After setting the options, please run the script on each worker.
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
 # Number of GPUs per GPU worker
 GPUS_PER_NODE=$(python -c 'import torch; print(torch.cuda.device_count())')
@@ -46,20 +42,6 @@ fi
 
 MODEL="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B" # Set the path if you do not want to load from huggingface directly
 
-PRETRAINED_MODEL_PATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/Kimi_Pa_V2_ckpt55000"
-
-# ATTENTION: specify the path to your training data, which should be a json file consisting of a list of conversations.
-# See the section for finetuning in README for more information.
-DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/sft_train_semantic_codes.json"
-DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/eval/sft_eval_semantic_codes.json"
-# DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/eval/sft_eval_semantic_codes.json"
-output_dir="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/Kimi_test_2"
-batch_size=4
-model_max_length=512
-
-echo "PRETRAINED_MODEL_PATH: $PRETRAINED_MODEL_PATH"
-echo "DATA: $DATA_TRAIN"
-
 DISTRIBUTED_ARGS="
     --nproc_per_node $GPUS_PER_NODE \
     --nnodes $NNODES \
@@ -67,26 +49,36 @@ DISTRIBUTED_ARGS="
     --master_addr $MASTER_ADDR \
     --master_port $MASTER_PORT
 "
-
 echo "start finetune"
 echo "DISTRIBUTED_ARGS: $DISTRIBUTED_ARGS"
+
+PRETRAINED_MODEL_PATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/checkpoint-55000"
+DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/sft_train_semantic_codes.json"
+DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/sft_eval_semantic_codes.json"
+# DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/old/train/sft_train_semantic_codes.json"
+# DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/old/eval/sft_eval_semantic_codes.json"
+output_dir="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.2/pt_model"
+batch_size=4
+model_max_length=2048
+cp /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft/finetune_codes/finetune_sft_ds.sh $output_dir/finetune_sft_ds.sh.backup
 
 cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
 torchrun $DISTRIBUTED_ARGS finetune.py \
     --model_name_or_path $MODEL \
     --model_path $PRETRAINED_MODEL_PATH \
     --train_data_path $DATA_TRAIN \
+    --eval_data_path $DATA_EVAL \
     --eval_ratio 0.05 \
     --bf16 True \
     --output_dir $output_dir \
     --num_train_epochs 3 \
     --per_device_train_batch_size $batch_size \
     --per_device_eval_batch_size $batch_size \
-    --gradient_accumulation_steps 16 \
+    --gradient_accumulation_steps 8 \
     --eval_strategy "steps" \
     --save_strategy "steps" \
-    --eval_steps 200 \
-    --save_steps 200 \
+    --eval_steps 400 \
+    --save_steps 400 \
     --save_total_limit 200 \
     --learning_rate 1e-6 \
     --weight_decay 0.1 \

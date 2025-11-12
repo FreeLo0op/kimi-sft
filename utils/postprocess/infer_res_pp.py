@@ -213,21 +213,20 @@ def get_phoneme_pa_res(infer_infos, dataset_name ,logger):
 def get_word_pa_res(infer_infos, pa_type:str, dataset_name:str, logger):
     total_num, infer_ress = infer_infos
     pred_failed_num, diff_num = 0, 0
-    word_label_pred, word_label_true, all_index, all_words, all_audio_path = list(), list(), list(), list(), list()
-    word_label_true_high, word_label_pred_high = [], []
-    
+    word_label_pred, word_label_true = list(), list()
+    word_label_modify = {}
+    with open('/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_word_accuracy_modify', 'r') as f:
+        for line in f:
+            line = line.strip().split('\t', maxsplit=2)
+            key = line[0]
+            word_label_modify[key] = line[2].split(' ')
     logger.info(f"评估类型: {pa_type}")
-    # if dataset_name == 'xiaoheiban':
-    #     keys = pd.read_csv('/mnt/pfs_l2/jieti_team/SFT/hupeng/data/cn/xiaoheiban/xiaoheiban_clean_1/test/label_word_accuracy', sep='\t', header=None, index_col=0)
-    #     keys = keys.index.tolist()
-    pcc_list = []
+
     for line in infer_ress:
         line = json.loads(line)
         predict, label, audio = line['predict'], line['label'], line['audio']
         key, ext = os.path.splitext(os.path.basename(audio))
-        # if dataset_name == 'xiaoheiban' and key not in keys:
-        #     total_num -= 1
-        #     continue
+
         try:
             if dataset_name == 'xiaoheiban':
                 predict = re.findall(r'结果为：(.*)。', predict)[0]
@@ -241,52 +240,35 @@ def get_word_pa_res(infer_infos, pa_type:str, dataset_name:str, logger):
                 label = json.loads(label)
                 pred_scores = [item[pa_type] for item in predict]
                 label_scores = [item[pa_type] for item in label]
+                if key in word_label_modify:
+                    label_scores = word_label_modify[key]
                 words = [item['word'] for item in predict]
         except Exception as e:
             # logger.error(f"Error parsing predict: {key} : {e}")
             pred_failed_num += 1
             continue
 
-        
         if len(pred_scores) != len(label_scores):
             diff_num += 1
             continue
         try:
             pred_scores = [float(score) for score in pred_scores]
             label_scores = [float(score) for score in label_scores]
-            # 临时实验测试修改0-10分到0-3分
-            # label_scores = [float(score / 10 * 3) for score in label_scores]
             
-            for i in range(len(pred_scores)):
-                pred_scores[i] = score_check(dataset_name, 'word', 'accuracy', pred_scores[i], logger, key)
-            audio_index = [f'{key}_{i}' for i in range(len(label_scores))]
-            single_pcc = pcc_compute(label_scores, pred_scores, dataset_name, logger=logger, if_skip=True)
-            pcc_list.append(single_pcc)
+            # for i in range(len(pred_scores)):
+            #     pred_scores[i] = score_check(dataset_name, 'word', 'accuracy', pred_scores[i], logger, key)
         except Exception as e:
             logger.error(f"Error parsing predict: {key} : {e}")
             pred_failed_num += 1
             continue
         
-        # 保留高分数据
-        all_above_7 = all(score >= 7 for score in label_scores)
-        if all_above_7:
-            word_label_true_high.extend(label_scores)
-            word_label_pred_high.extend(pred_scores)
 
         word_label_pred.extend(pred_scores)
         word_label_true.extend(label_scores)
-        all_index.extend(audio_index)
-        # all_words.extend(words)
-        all_audio_path.extend([audio] * len(label_scores))
+
     # 使用logger记录结果
     logger.log_prediction_stats(pred_failed_num, total_num, diff_num)
     pcc_compute(word_label_true, word_label_pred, dataset_name, logger=logger)
-    mse(word_label_true, word_label_pred, dataset_name)
-    logger.info(f'平均单句PCC: {np.nanmean(pcc_list) if len(pcc_list) > 0 else 0:.4f}')
-
-    # 高分段pcc 7-10分
-    if word_label_true_high:
-        pcc_compute(word_label_true_high, word_label_pred_high, f'{dataset_name}_high_7-10', logger=logger)
 
     acc_threshold_1 = acc_with_threshold(word_label_true, word_label_pred, threshold=1)
     acc_threshold_0 = acc_with_threshold(word_label_true, word_label_pred, threshold=0)
@@ -298,7 +280,6 @@ def get_snt_pa_res(infer_infos, dataset_name, logger):
     total_num, infer_ress = infer_infos
     pred_failed_num = 0
     snt_label_pred, snt_label_true = list(), list()
-    snt_label_pred_high, snt_label_true_high = list(), list()
     for line in infer_ress:
         try:
             line = json.loads(line)
@@ -313,9 +294,6 @@ def get_snt_pa_res(infer_infos, dataset_name, logger):
             snt_label_pred.append(predict)
             snt_label_true.append(label)
 
-            if label >= 7:
-                snt_label_pred_high.append(predict)
-                snt_label_true_high.append(label)
         except Exception as e:
             # logger.error(f"Error parsing predict: {key} : {e}")
             pred_failed_num += 1
@@ -324,9 +302,6 @@ def get_snt_pa_res(infer_infos, dataset_name, logger):
     # 使用logger记录结果
     logger.log_prediction_stats(pred_failed_num, total_num)
     pcc_compute(snt_label_true, snt_label_pred, dataset_name, logger=logger)
-    # 高分pcc
-    if snt_label_true_high:
-        pcc_compute(snt_label_true_high, snt_label_pred_high, f'{dataset_name}:HighScore', logger=logger)
 
 def get_snt_multi_pa_res(infer_infos, dataset_name, logger):
 
@@ -568,7 +543,6 @@ def get_asr_res(infer_infos, logger):
             predict_res = line['predict']
             predict_res = re.findall(r'识别结果为：(\[[^\[\]]*\])', predict_res)
             predict_res = ast.literal_eval(predict_res[0])
-            predict_res = [x["word"] for x in predict_res]
             for item in predict_res:
                 if not isinstance(item, str):
                     break_flage = True
@@ -579,7 +553,6 @@ def get_asr_res(infer_infos, logger):
             label_ref = line['label']
             label_ref = re.findall(r'识别结果为：(\[[^\[\]]*\])', label_ref)
             label_ref = ast.literal_eval(label_ref[0])
-            label_ref = [x["word"] for x in label_ref]
 
             pred_labels.append(predict_res)
             true_labels.append(label_ref)
@@ -818,22 +791,6 @@ def get_open_pa_res(infer_infos, dataset_name: str, logger, output_csv_file: str
     # 高分pcc
     if all_label_scores_high:
         pcc_compute(all_label_scores_high, all_predict_scores_high, dataset_name, logger=logger)
-        
-    # 保存到 CSV 文件（如果指定了输出文件）
-    if output_csv_file and data_list:
-        os.makedirs(os.path.dirname(output_csv_file), exist_ok=True)
-        with open(output_csv_file, 'w', encoding='utf-8', newline='') as f:
-            fieldnames = ['audio_name', 'word_scores_llm', 'predict_feedback', 'label_feedback', 'url']
-            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='\t')
-            
-            # 写入表头
-            writer.writeheader()
-            
-            # 写入数据
-            for row in data_list:
-                writer.writerow(row)
-        
-        logger.info(f"成功保存 {len(data_list)} 条数据到 {output_csv_file}")
 
 def get_full_pa_res(infer_infos, dataset_name: str, logger):
     total_num, infer_ress = infer_infos
@@ -938,3 +895,83 @@ def get_full_pa_res(infer_infos, dataset_name: str, logger):
     pcc_compute(all_word_true_scores, all_word_prd_scores, f'{dataset_name}_word_acc', logger=logger)
     pcc_compute(all_snt_acc_true_scores, all_snt_acc_prd_scores, f'{dataset_name}_snt_acc', logger=logger)
     pcc_compute(all_snt_flu_true_scores, all_snt_flu_prd_scores, f'{dataset_name}_snt_flu', logger=logger)
+
+def get_ket_pa_res(infer_infos, dataset_name: str, logger):
+    gt_asr_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/ket/data/test/labels/asr_label_v1105'
+    gt_asr = defaultdict(list)
+    fo = open('/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.1_infer/infer_res/pamllm_pa_score.txt', 'w', encoding='utf-8')
+    with open(gt_asr_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip().split('\t')
+            key, asr, answer = line[0], line[2], line[3]
+            asr = '' if asr == '<None>' else asr
+            answer = '' if answer == '<None>' else answer
+            gt_asr[key] = [asr, answer]
+    
+    doubao_app_asr_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/ket/data/test/asr_res/doubaoapp_asr.txt'
+    doubao_app_asr_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/ket/data/test/asr_res/doubao_tal_api_asr.txt'
+    huiliu_asr = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/ket/data/test/asr_res/huiliu_asr.txt'
+    with open(doubao_app_asr_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip().split('\t')
+            key, asr = line[0], line[1]
+            if key in gt_asr:
+                gt_asr[key].append(asr)
+    with open(huiliu_asr, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip().split('\t')
+            key, asr = line[0], line[1]
+            if key in gt_asr:
+                gt_asr[key].append(asr)
+
+    total_num, infer_ress = infer_infos
+    pred_failed_num = 0
+    snt_acc_pred_list, snt_acc_true_list = [], []
+    all_asr_wer, all_answer_wer = [], []
+
+    snt_acc_pattern = r'评分为：([\d\.]+)分'
+    for line in infer_ress:
+        line = json.loads(line)
+        key, _ = os.path.splitext(os.path.basename(line['audio']))
+        label, predict = line['label'], line['predict']
+        try:
+            asr_label = re.findall(r'识别结果为：(.*)有效回答文本为', label)[0]
+            answer_label = re.findall(r'有效回答文本为：(.*)句子发音准确度评分为', label)[0]
+            asr_label = gt_asr[key][0]
+            answer_label = gt_asr[key][1]
+
+            asr_pred = re.findall(r'识别结果为：(.*)有效回答文本为', predict)[0]
+            answer_pred = re.findall(r'有效回答文本为：(.*)句子发音准确度评分为', predict)[0]
+
+            # answer_pred = text_normalize(answer_pred)
+            # asr_pred = text_normalize(asr_pred)
+            # fo.write(f"{key}\t{' '.join(asr_pred)}\t{' '.join(answer_pred)}\n")
+        except Exception as e:
+            pred_failed_num += 1
+            logger.error(f"{key} 提取ASR文本失败: {e}")
+            # sys.exit(1)
+            continue
+        
+        asr_wer = wer(asr_label, asr_pred)
+        answer_wer = wer(answer_label, answer_pred)
+        all_asr_wer.append(asr_wer)
+        all_answer_wer.append(answer_wer)
+
+        snt_acc_true = re.findall(snt_acc_pattern, label)[0]
+        snt_acc_pred = re.findall(snt_acc_pattern, predict)[0]
+        snt_acc_pred = score_check('tal-k12', 'sentence', 'accuracy', snt_acc_pred, logger, key)
+        if abs(float(snt_acc_pred) - float(snt_acc_true)) > 3:
+            logger.warning(f"{key} 句子发音准确性分数差异过大: {snt_acc_pred} vs {snt_acc_true}")
+            # continue
+
+        snt_acc_pred_list.append(snt_acc_pred)
+        snt_acc_true_list.append(snt_acc_true)
+        fo.write(f"{key}\t{snt_acc_pred}\n")
+    
+    logger.info(f"预测失败数量: {pred_failed_num}/{total_num}")
+    logger.info(f"预测句子发音准确性分数数量: {len(snt_acc_pred_list)}")
+    logger.info(f"标签句子发音准确性分数数量: {len(snt_acc_true_list)}")
+    pcc_compute(snt_acc_true_list, snt_acc_pred_list, f'{dataset_name}_snt_acc', logger=logger)   
+
+    logger.info(f"整体WER: {np.mean(all_asr_wer) * 100:.2f}%")
+    logger.info(f"有效回答WER: {np.mean(all_answer_wer) * 100:.2f}%")

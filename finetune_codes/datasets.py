@@ -7,6 +7,7 @@ from kimia_infer.utils.special_tokens import instantiate_extra_tokens
 from kimia_infer.utils.data import KimiAContent
 import librosa
 import numpy as np
+import torchaudio
 
 class LazySupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
@@ -87,7 +88,9 @@ class LazySupervisedDataset(Dataset):
         if message["message_type"] == "text":
             text = message["content"]
             text_tokens = self._tokenize_text(text)
+
             if len(text_tokens) > self.max_len // 2:
+                # print('DEBUG text: {} text_tokens: {} max_len: {}'.format(text, len(text_tokens), self.max_len))
                 text_tokens = text_tokens[:self.max_len // 2]
 
             kimia_content_msg.text_extend(text_tokens, has_loss)
@@ -101,10 +104,9 @@ class LazySupervisedDataset(Dataset):
 
         elif message["message_type"] == "audio":
             speech_tokens = message["audio_tokens"]
-            # print('DEBUG speech_tokens: {} max_len: {}'.format(len(speech_tokens), self.max_len))
             if len(speech_tokens) > self.max_len // 2:
+                # print('DEBUG speech_tokens: {} max_len: {}'.format(len(speech_tokens), self.max_len))
                 speech_tokens = speech_tokens[:self.max_len // 2]
-                # print('DEBUG new speech_tokens: {} max_len: {}'.format(len(speech_tokens), self.max_len))
 
             kimia_content_msg.audio_append(self.extra_tokens.media_begin)
             kimia_content_msg.audio_extend(speech_tokens, is_continuous=True, audio_token_loss_mask=has_loss)
@@ -126,7 +128,7 @@ class LazySupervisedDataset(Dataset):
                 whisper_feature = self.extract_whisper_feat(message["content"])
                 kimia_content_msg.continuous_feature.append(whisper_feature)
         elif message["message_type"] == None:
-            pass
+            raise NotImplementedError("message_type is None only for assistant start message")
         else:
             raise NotImplementedError(f"message_type: {message['message_type']}")
 

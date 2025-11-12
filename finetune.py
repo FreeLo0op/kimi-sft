@@ -198,6 +198,7 @@ def train():
         device_map=None,
         **model_load_kwargs
     )
+    model.config.use_cache = False
     
     text_tokenizer = AutoTokenizer.from_pretrained(
         cache_path, trust_remote_code=True
