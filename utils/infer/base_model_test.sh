@@ -31,7 +31,7 @@ cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
 testDataset_list=/mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft/utils/configs/base_model_testDataset.list
 root_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/sft/test'
 
-model_path=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/Kimi_Pa_V2_ckpt70000
+model_path=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/Kimi_Pa_V2_ckpt55000
 output_dir=${model_path}/infer_res
 num_gpus=4
 

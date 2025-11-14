@@ -1,5 +1,4 @@
 import os
-
 import tqdm
 import torch
 from loguru import logger
@@ -117,7 +116,9 @@ class KimiAudio(object):
         #     range(max_new_tokens), desc="Generating tokens", disable=False
         # ):
         for i in range(max_new_tokens):
-            audio_logits, text_logits, past_key_values = self.alm.forward(
+            # audio_logits, text_logits, past_key_values 
+            
+            res = self.alm.forward(
                 input_ids=decoder_input_audio_ids,
                 text_input_ids=decoder_input_text_ids,
                 whisper_input_feature=decoder_input_whisper_feature,
@@ -126,11 +127,14 @@ class KimiAudio(object):
                 past_key_values=past_key_values,
                 return_dict=False,
             )
-
+            audio_logits, text_logits, extra_logits, past_key_values = res
             # Sample text token using the sampler
             next_token_text = sampler.sample_text_logits(
                 text_logits, recent_tokens=text_previous_tokens[:i] if i > 0 else None
             )
+            # next_token_text = sampler.sample_text_logits(
+            #     extra_logits, recent_tokens=text_previous_tokens[:i] if i > 0 else None
+            # )
 
             # Sample audio token using the sampler
             next_audio_token = sampler.sample_audio_logits(

@@ -544,6 +544,8 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
     def __init__(self, config: KimiAudioConfig):
         super().__init__(config)
         self.skip_audio_transformer = True
+        self.if_extra_num_layers = True
+        self.extra_num_layers = 2
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.kimia_mimo_transformer_from_layer_index = (
@@ -571,6 +573,14 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
         self.kimia_media_begin = config.kimia_media_begin
         self.kimia_media_end = config.kimia_media_end
 
+        if self.if_extra_num_layers:
+            # self.extra_layers = nn.ModuleList(
+            #     [
+            #         MoonshotDecoderLayer(config)
+            #         for _ in range(self.extra_num_layers)
+            #     ]
+            # )
+            self.extra_norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -647,7 +657,15 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
                 "You cannot specify both input_ids and inputs_embeds at the same time"
             )
         elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape
+            # debug 1113
+            # Allow 1D input_ids (seq_len,) and treat as batch_size=1
+            if input_ids.dim() == 1:
+                batch_size = 1
+                seq_length = input_ids.size(0)
+                # keep a consistent tensor shape for later code
+                input_ids = input_ids.unsqueeze(0)
+            else:
+                batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
         else:
@@ -673,13 +691,21 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
             # shape: batch, seq_len, hidden_size
             device = input_ids.device
             input_ids = input_ids.to(device)
-            text_input_ids = text_input_ids.to(device)
+
+            # text_input_ids may be None. If provided and 1D, unsqueeze to batch dim
+            # debug 1113
+            if text_input_ids is not None:
+                if text_input_ids.dim() == 1:
+                    text_input_ids = text_input_ids.unsqueeze(0)
+                text_input_ids = text_input_ids.to(device)
+
             audio_emb = self.embed_tokens(input_ids)
             if self.use_whisper_feature:
                 if whisper_input_feature is None or all(
                     [w.numel() == 0 for w in whisper_input_feature]
                 ):
                     whisper_emb = torch.zeros_like(audio_emb)
+                    whisper_emb = whisper_emb.to(device)
                 else:
                     # some items in the batch have audio
                     media_start_idx = (input_ids == self.kimia_media_begin).nonzero()
@@ -713,6 +739,9 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
                         # 确保whisper_input_feature_i是2维张量
                         if whisper_input_feature_i.dim() == 1:
                             whisper_input_feature_i = whisper_input_feature_i.unsqueeze(0)
+                        elif whisper_input_feature_i.dim() == 3:
+                            _, seq_len, feature_dim = whisper_input_feature_i.shape
+                            whisper_input_feature_i = whisper_input_feature_i.reshape(seq_len, feature_dim)
 
                         # 与 mask 对齐的健壮性：取三者最小值，避免越界
                         current_mask = is_continuous_mask[batch_idx, start_idx+1:end_idx]
@@ -731,21 +760,22 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
                     whisper_emb = self.vq_adaptor(
                         expanded_whisper.transpose(0, 1)
                     ).transpose(0, 1)
+                    is_continuous_mask = is_continuous_mask.to(device)
+                    whisper_emb = whisper_emb.to(device)
+                    whisper_emb = whisper_emb * is_continuous_mask[:, :, None]
+                    encoder_input_addwith_discrete_token = (audio_emb + whisper_emb) * torch.sqrt(
+                        torch.tensor(2.0, dtype=whisper_emb.dtype, device=device)
+                    )
+                    audio_emb = (
+                        audio_emb * (~is_continuous_mask[:, :, None])
+                        + encoder_input_addwith_discrete_token
+                        * is_continuous_mask[:, :, None]
+                    )
             else:
                 whisper_emb = torch.zeros_like(audio_emb)
+                whisper_emb = whisper_emb.to(device)
 
-            is_continuous_mask = is_continuous_mask.to(device)
-            whisper_emb = whisper_emb.to(device)
-            whisper_emb = whisper_emb * is_continuous_mask[:, :, None]
-
-            encoder_input_addwith_discrete_token = (audio_emb + whisper_emb) * torch.sqrt(
-                torch.tensor(2.0, dtype=whisper_emb.dtype, device=device)
-            )
-            audio_emb = (
-                audio_emb * (~is_continuous_mask[:, :, None])
-                + encoder_input_addwith_discrete_token
-                * is_continuous_mask[:, :, None]
-            )
+            
             if text_input_ids is not None and text_input_ids.sum() != 0:
                 inputs_embeds = audio_emb + self.embed_tokens(text_input_ids)
             else:
@@ -787,8 +817,11 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
 
             if idx == self.kimia_mimo_transformer_from_layer_index:
                 mimo_hidden_states = hidden_states.clone()
+            if idx == self.extra_num_layers:
+                extra_hidden_states = hidden_states.clone()
 
         hidden_states = self.norm(hidden_states)
+        extra_hidden_states = self.extra_norm(extra_hidden_states)
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
@@ -832,6 +865,7 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
                 for v in [
                     hidden_states,
                     mimo_hidden_states,
+                    extra_hidden_states,
                     next_cache,
                     all_hidden_states,
                     all_hidden_states,
@@ -840,7 +874,7 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
                 if v is not None
             )
         return BaseModelOutputWithPast(
-            last_hidden_state=(hidden_states, mimo_hidden_states),
+            last_hidden_state=(hidden_states, mimo_hidden_states, extra_hidden_states),
             # last_hidden_state=mimo_hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
@@ -856,6 +890,7 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
         self.model = MoonshotKimiaModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.extra_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.mimo_output = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -872,6 +907,12 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def get_extra_output_embeddings(self):
+        return self.extra_head
+
+    def set_extra_output_embeddings(self, new_embeddings):
+        self.extra_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -931,26 +972,32 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
             return_dict=return_dict,
         )
         if return_dict:
-            hidden_states, mimo_hidden_states = (
+            hidden_states, mimo_hidden_states, extra_hidden_states = (
                 outputs.last_hidden_state[0],
                 outputs.last_hidden_state[1],
+                outputs.last_hidden_state[2],
             )
             # mimo_hidden_states = outputs.last_hidden_state
         else:
             hidden_states, mimo_hidden_states = outputs[0], outputs[1]
+            extra_hidden_states = outputs[2]
             # mimo_hidden_states = outputs[0]
 
         audio_logits = self.lm_head(hidden_states)
+        extra_logits = self.extra_head(extra_hidden_states)
+        # logger.info(f"audio_logits shape: {audio_logits.shape}")
+        # logger.info(f"extra_logits shape: {extra_logits.shape}")
         # text_logits = self.mimo_output(mimo_hidden_states)
         text_logits = audio_logits
 
         if not return_dict:
-            output = (text_logits, audio_logits) + outputs[2:]
+            output = (text_logits, audio_logits, extra_logits) + outputs[3:]
             # output = (audio_logits,) + outputs[2:]
             return output
+        
         return CausalLMOutputWithPast(
             loss=None,
-            logits=(text_logits, audio_logits),
+            logits=(text_logits, audio_logits, extra_logits),
             # logits=(audio_logits,),
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,

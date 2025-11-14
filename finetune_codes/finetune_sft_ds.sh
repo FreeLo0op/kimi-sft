@@ -52,22 +52,20 @@ DISTRIBUTED_ARGS="
 echo "start finetune"
 echo "DISTRIBUTED_ARGS: $DISTRIBUTED_ARGS"
 
-PRETRAINED_MODEL_PATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/checkpoint-55000"
-DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/sft_train_semantic_codes.json"
-DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/sft_eval_semantic_codes.json"
+PRETRAINED_MODEL_PATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/checkpoint-16000"
+DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/prompt_data_train_semantic_codes.json"
+# DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/xxj_sft_eval_semantic_codes.json"
 # DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/old/train/sft_train_semantic_codes.json"
 # DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/old/eval/sft_eval_semantic_codes.json"
-output_dir="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.2/pt_model"
-batch_size=4
+output_dir="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_test/pt_model"
+batch_size=8
 model_max_length=2048
-cp /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft/finetune_codes/finetune_sft_ds.sh $output_dir/finetune_sft_ds.sh.backup
 
 cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
 torchrun $DISTRIBUTED_ARGS finetune.py \
     --model_name_or_path $MODEL \
     --model_path $PRETRAINED_MODEL_PATH \
     --train_data_path $DATA_TRAIN \
-    --eval_data_path $DATA_EVAL \
     --eval_ratio 0.05 \
     --bf16 True \
     --output_dir $output_dir \
@@ -80,7 +78,7 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --eval_steps 400 \
     --save_steps 400 \
     --save_total_limit 200 \
-    --learning_rate 1e-6 \
+    --learning_rate 1e-5 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
     --warmup_ratio 0.2 \
@@ -91,3 +89,7 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --gradient_checkpointing True \
     --lazy_preprocess True \
     --deepspeed finetune_codes/ds_config_zero3.json
+
+
+cp /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft/finetune_codes/finetune_sft_ds.sh $output_dir/finetune_sft_ds.sh.backup
+echo "Finetune process completed."

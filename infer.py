@@ -16,27 +16,32 @@ sampling_params = {
     "text_repetition_window_size": 16,
 }
 
-def prompt_loader(prompt_path:str) -> list:
+def prompt_loader(prompt_path:str, if_convert:bool=True) -> list:
     infer_messages = []
     with open(prompt_path, "r", encoding="utf-8") as f:
-        f = json.load(f)
-        for item in f:
-            single_messages = []
+        if if_convert:
+            f = json.load(f)
+            for item in f:
+                single_messages = []
+                messages = item["messages"]
+                system_content = messages[0]["content"]
+                user_content = messages[1]["content"]
+                user_content = user_content.replace("<audio>", "").strip()
+                infer_content = f"{system_content}{user_content}"
 
-            messages = item["messages"]
-            system_content = messages[0]["content"]
-            user_content = messages[1]["content"]
-            user_content = user_content.replace("<audio>", "").strip()
-            infer_content = f"{system_content}{user_content}"
+                label = item["messages"][2]["content"]
+                audio = item["audios"][0]
 
-            label = item["messages"][2]["content"]
-            audio = item["audios"][0]
-
-            single_messages.append({"role": "user", "message_type": "text", "content": infer_content})
-            single_messages.append({"role": "user", "message_type": "audio", "content": audio})
-            # single_messages.append({"role": "user", "message_type": "audio-text", "content": [audio, infer_content]})
-            single_messages.append({"role": "assistant_gt", "message_type": "text", "content": label})
-            infer_messages.append(single_messages)
+                single_messages.append({"role": "user", "message_type": "text", "content": infer_content})
+                single_messages.append({"role": "user", "message_type": "audio", "content": audio})
+                # single_messages.append({"role": "user", "message_type": "audio-text", "content": [audio, infer_content]})
+                single_messages.append({"role": "assistant_gt", "message_type": "text", "content": label})
+                infer_messages.append(single_messages)
+        else:
+            for line in f:
+                item = json.loads(line)
+                single_messages = item['conversation']
+                infer_messages.append(single_messages)
     return infer_messages
 
 def main(
@@ -45,7 +50,7 @@ def main(
         gpu_id:str,
         model_path:str="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/Kimi_Pa_V1.1_hf_for_inference",
     ):
-    infer_messages = prompt_loader(infer_prompt)
+    infer_messages = prompt_loader(infer_prompt, if_convert=False)
     model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:{gpu_id}')
     # infer_res = []
     fo = open(output_path, "w", encoding="utf-8")

@@ -1,15 +1,17 @@
 #!/bin/bash
-
+export CUDA_VISIBLE_DEVICES=0,1,3,4,5,6,7
+num_gpus=7
 set -euo pipefail
+
 convert=$1  # "true" or "false"
 if [ "$convert" == "true" ]; then
     echo "Converting model for inference..."
 
     model_name=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B
-    input_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.1
-    output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.1_infer
+    input_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_test/pt_model
+    output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_test/model_infer
 
-    cd /mnt/pfs_l2/jieti_team/SFT/hupeng/Kimi-Audio
+    cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
     python -m finetune_codes.model --model_name $model_name \
         --action "export_model" \
         --input_dir $input_dir \
@@ -20,9 +22,9 @@ cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
 
 testDataset_list=/mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft/utils/configs/testDataset.list
 root_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/sft/test'
-output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.1_infer/infer_res
-model_path=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.1_infer
-num_gpus=4
+output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_test/model_infer/infer_res
+model_path=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_test/model_infer
+
 
 if [[ ! -f "$testDataset_list" ]]; then
 	echo "test dataset list not found: $testDataset_list" >&2

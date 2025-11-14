@@ -95,6 +95,8 @@ def single_main(infer_res_file:str, task_type:str, log_file:str=None, clear_log:
             get_full_pa_res(lines, 'full_pa', logger)
         case 'ket_pa':
             get_ket_pa_res(lines, 'ket_pa', logger)
+        case 'xxj':
+            get_xxj_res(lines, 'xxj', logger)
         case _:
             logger.error(f"Unknown task type: {task_type}")
     pass
@@ -109,11 +111,11 @@ if __name__ == "__main__":
     #     clear_log=True
     # )
 
-    infer_res_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/Kimi_Pa_V2_ckpt70000/infer_res/infer_tal-k12_sent_pa_accuracy_nocot-v2_test.json'
+    infer_res_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.3/model_infer/infer_res/infer_xxj_compare_v2_test.json'
     log_file = os.path.join(os.path.dirname(infer_res_file), 'evaluation.log')
     single_main(
         infer_res_file=infer_res_file,
-        task_type='sent_pa',
+        task_type='xxj',
         log_file=log_file,
         clear_log=False
     )

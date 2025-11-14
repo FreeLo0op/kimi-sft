@@ -92,7 +92,7 @@ def prompt_convert(data, audio_map:dict={}):
             ]
         }
     else:
-        data = None
+        data = Nonel
 
     return data
 
@@ -170,7 +170,7 @@ def main_sft(
         # KET
         # 'ket_pa_v1_train.json',
         # 学习机半开放题
-        # 'xxj_compare_v2_train.json'
+        'xxj_compare_v2_train.json'
     ]
 
     eval_root_dir = '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/sft/eval'
@@ -184,6 +184,8 @@ def main_sft(
 
     new_prompts = []
     for ori_prompt in ori_prompts:
+        if 'xxj' not in ori_prompt:
+            continue
         prompt_path = os.path.join(root_dir, ori_prompt)
         if not os.path.exists(prompt_path):
             logger.warning(f"File not found: {prompt_path}")
@@ -214,11 +216,11 @@ def main_sft(
 if __name__ == "__main__":
     main_sft(
         dataset_type='train',
-        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/sft_train.json'
+        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/xxj_sft_train.json'
     )
     main_sft(
         dataset_type='eval',
-        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/sft_eval.json'
+        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/xxj_sft_eval.json'
     )
 
     # main_base(

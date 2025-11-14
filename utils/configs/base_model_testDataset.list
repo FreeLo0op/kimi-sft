@@ -1,4 +1,4 @@
-tal-k12_word_pa_accuracy_nocot-v2_test.json
-tal-k12_sent_pa_accuracy_nocot-v2_test.json
-aishell_asr_cotv1_test.json
+#tal-k12_word_pa_accuracy_nocot-v2_test.json
+#tal-k12_sent_pa_accuracy_nocot-v2_test.json
+#aishell_asr_cotv1_test.json
 librispeech_asr_cotv1_test.json

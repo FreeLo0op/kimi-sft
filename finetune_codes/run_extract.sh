@@ -32,10 +32,10 @@ echo "使用GPU: $GPU_IDS"
 echo "================================"
 
 # 切换到脚本目录
-cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/Kimi-Audio/finetune_codes
+# cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
 
 # 设置Python路径
-export PYTHONPATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/github/Kimi-Audio:$PYTHONPATH"
+# export PYTHONPATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft:$PYTHONPATH"
 
 # 显式设置使用的GPU
 export CUDA_VISIBLE_DEVICES="$GPU_IDS"

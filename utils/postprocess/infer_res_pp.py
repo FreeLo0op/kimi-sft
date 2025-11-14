@@ -841,7 +841,7 @@ def get_full_pa_res(infer_infos, dataset_name: str, logger):
             word_pre_scores = ast.literal_eval(word_pre)
             word_true_scores = ast.literal_eval(word_true)
             if not word_pre_scores:
-                logger.warning(f"{key} 单词评测结果为空，全部设置为0")
+                # logger.warning(f"{key} 单词评测结果为空，全部设置为0")
                 word_pre_scores = [0] * len(word_true_scores)
 
             if len(word_pre_scores) != len(word_true_scores):
@@ -910,6 +910,7 @@ def get_ket_pa_res(infer_infos, dataset_name: str, logger):
     
     doubao_app_asr_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/ket/data/test/asr_res/doubaoapp_asr.txt'
     doubao_app_asr_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/ket/data/test/asr_res/doubao_tal_api_asr.txt'
+    doubao_app_asr_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/github/omnilingual-asr/ket_asr.txt'
     huiliu_asr = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/ket/data/test/asr_res/huiliu_asr.txt'
     with open(doubao_app_asr_file, 'r', encoding='utf-8') as f:
         for line in f:
@@ -942,6 +943,7 @@ def get_ket_pa_res(infer_infos, dataset_name: str, logger):
 
             asr_pred = re.findall(r'识别结果为：(.*)有效回答文本为', predict)[0]
             answer_pred = re.findall(r'有效回答文本为：(.*)句子发音准确度评分为', predict)[0]
+            # asr_pred, answer_pred = gt_asr[key][2], gt_asr[key][2]
 
             # answer_pred = text_normalize(answer_pred)
             # asr_pred = text_normalize(asr_pred)
@@ -975,3 +977,52 @@ def get_ket_pa_res(infer_infos, dataset_name: str, logger):
 
     logger.info(f"整体WER: {np.mean(all_asr_wer) * 100:.2f}%")
     logger.info(f"有效回答WER: {np.mean(all_answer_wer) * 100:.2f}%")
+
+def get_xxj_res(infer_infos, dataset_name: str, logger):
+    total_num, infer_ress = infer_infos
+    pred_failed_num = 0
+    all_predict, all_label = [], []
+    total_wer = 0
+    for line in infer_ress:
+        line = json.loads(line)
+        predict, label = line['predict'].replace('\n',' '), line['label'].replace('\n',' ')
+        prompt = line['prompt']
+        key, _ = os.path.splitext(os.path.basename(line['audio']))
+        try:
+            txt_pred = re.findall(r'学生作答结果为[:]?(.*)；', predict)[0]
+            txt_label = re.findall(r'学生作答结果为:(.*)；', label)[0]
+            current_wer = wer(txt_label, txt_pred)
+            total_wer += current_wer
+
+            predict = re.findall(r'学生作答结果:(.*)。', predict)[0]
+            ref_answer = re.findall(r'参考答案：(.*)\n', prompt)[0]
+            question = re.findall(r'题目描述：(.*)\n', prompt)[0]
+            label = re.findall(r'学生作答结果:(.*)。', label)[0]
+            # if txt_pred.strip() in prompt and predict == '回答错误':
+            #     logger.info(f"{key} 预测答案在题目中出现，实际标签为回答错误，修正为回答正确")
+            #     predict = '回答正确'
+        except Exception as e:
+            logger.error(f"计算WER时出错: {key}, {e}")
+            continue
+
+        # print(f"{key}\t{question}\t{ref_answer}\t{txt_pred}\t{txt_label}\t{predict}\t{label}")
+        if label == '回答正确':
+            all_label.append(1)
+        else:
+            all_label.append(0)
+        
+        if predict == '回答正确':
+            all_predict.append(1)
+        else:
+            all_predict.append(0)
+        
+        if label != predict:
+            logger.info(f"{key}")
+        
+    avg_wer = total_wer / total_num if total_num > 0 else 0
+    logger.info(f"平均WER: {avg_wer}")
+    cm = confusion_matrix(all_label, all_predict)
+    cr = classification_report(all_label, all_predict)
+
+    print(f"混淆矩阵: \n{cm}")
+    print(f"分类报告: \n{cr}")

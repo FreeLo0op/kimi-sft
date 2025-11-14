@@ -94,7 +94,7 @@ def make_supervised_data_module(
 
     with open(data_args.train_data_path, "r") as f:
         lines = f.readlines()
-        all_data = [json.loads(line) for line in lines]
+        all_data = [json.loads(line) for line in lines] #* 3  # 3倍数据增强
 
     # Process evaluation data
     eval_data = None
@@ -143,7 +143,7 @@ def make_supervised_data_module(
 def compute_loss(outputs, labels, num_items_in_batch=None):
     # remove audio loss
 
-    audio_logits, text_logits = outputs.logits
+    audio_logits, text_logits, extra_logits = outputs.logits
     # text_logits = outputs.logits[0]
 
     audio_labels, text_labels, audio_loss_mask, text_loss_mask = labels
@@ -151,11 +151,14 @@ def compute_loss(outputs, labels, num_items_in_batch=None):
 
     # audio_loss = torch.nn.functional.cross_entropy(audio_logits.view(-1, audio_logits.shape[-1]), audio_labels.view(-1), reduction="none")
     text_loss = torch.nn.functional.cross_entropy(text_logits.view(-1, text_logits.shape[-1]), text_labels.view(-1), reduction="none")
+    extra_loss = torch.nn.functional.cross_entropy(extra_logits.view(-1, extra_logits.shape[-1]), text_labels.view(-1), reduction="none")
 
     # audio_loss = (audio_loss * audio_loss_mask.view(-1)).sum() / (audio_loss_mask.view(-1).sum() + 1e-4)
     text_loss = (text_loss * text_loss_mask.view(-1)).sum() / (text_loss_mask.view(-1).sum() + 1e-4)
+    extra_loss = (extra_loss * text_loss_mask.view(-1)).sum() / (text_loss_mask.view(-1).sum() + 1e-4)
     # loss = audio_loss + text_loss
-    loss = text_loss
+    # logger.info(f"Text loss: {text_loss.item():.4f}, Extra loss: {extra_loss.item():.4f}")
+    loss = text_loss + extra_loss
     return loss
 
 def train():
@@ -198,7 +201,7 @@ def train():
         device_map=None,
         **model_load_kwargs
     )
-    model.config.use_cache = False
+    # model.config.use_cache = False
     
     text_tokenizer = AutoTokenizer.from_pretrained(
         cache_path, trust_remote_code=True

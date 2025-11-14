@@ -18,4 +18,9 @@
 #tal-k12-td1_full_pa_cotv1_test.json
 #tal-k12-td2_full_pa_cotv1_test.json
 
-ket_pa_v1_test.json
+#ket_pa_v1_test.json
+
+#aishell_asr_cotv1_test.json
+#librispeech_asr_cotv1_test.json
+#xxj_compare_v2_test.json
+prompt_data_test.jsonl
