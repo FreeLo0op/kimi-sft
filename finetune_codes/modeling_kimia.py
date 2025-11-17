@@ -544,6 +544,7 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
     def __init__(self, config: KimiAudioConfig):
         super().__init__(config)
         self.skip_audio_transformer = True
+        self.extra_head_train = False
         self.if_extra_num_layers = True
         self.extra_num_layers = 2
         self.padding_idx = config.pad_token_id
@@ -574,17 +575,10 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
         self.kimia_media_end = config.kimia_media_end
 
         if self.if_extra_num_layers:
-            # self.extra_layers = nn.ModuleList(
-            #     [
-            #         MoonshotDecoderLayer(config)
-            #         for _ in range(self.extra_num_layers)
-            #     ]
-            # )
             self.extra_norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-        
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -819,6 +813,9 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
                 mimo_hidden_states = hidden_states.clone()
             if idx == self.extra_num_layers:
                 extra_hidden_states = hidden_states.clone()
+                if self.extra_head_train:
+                    mimo_hidden_states = hidden_states.clone()
+                    break
 
         hidden_states = self.norm(hidden_states)
         extra_hidden_states = self.extra_norm(extra_hidden_states)
@@ -895,6 +892,46 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    # Freeze / unfreeze helpers (放到模型类内部)
+    def freeze_all(self):
+        for p in self.parameters():
+            p.requires_grad = False
+
+    def unfreeze_all(self):
+        for p in self.parameters():
+            p.requires_grad = True
+
+    def freeze_prefix(self, prefixes):
+        if isinstance(prefixes, str):
+            prefixes = [prefixes]
+        for name, p in self.named_parameters():
+            if any(name.startswith(pref) for pref in prefixes):
+                p.requires_grad = False
+
+    def unfreeze_prefix(self, prefixes):
+        if isinstance(prefixes, str):
+            prefixes = [prefixes]
+        for name, p in self.named_parameters():
+            if any(name.startswith(pref) for pref in prefixes):
+                p.requires_grad = True
+
+    def freeze_all_except(self, keep_prefixes):
+        # keep_prefixes: list or str -> 所有 name 以这些前缀开头的参数保持 requires_grad=True，其它置 False
+        if isinstance(keep_prefixes, str):
+            keep_prefixes = [keep_prefixes]
+        for name, p in self.named_parameters():
+            p.requires_grad = any(name.startswith(pref) for pref in keep_prefixes)
+
+    def print_trainable_summary(self):
+        total = 0
+        trainable = 0
+        for name, p in self.named_parameters():
+            num = p.numel()
+            total += num
+            if p.requires_grad:
+                trainable += num
+                print(f"训练层：{name}: requires_grad={p.requires_grad}, shape={tuple(p.shape)}")
 
     def get_input_embeddings(self):
         return self.model.embed_tokens

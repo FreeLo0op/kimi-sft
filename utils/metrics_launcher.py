@@ -111,11 +111,11 @@ if __name__ == "__main__":
     #     clear_log=True
     # )
 
-    infer_res_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.3/model_infer/infer_res/infer_xxj_compare_v2_test.json'
+    infer_res_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/model_infer_3/infer_res/infer_tal-k12-td2_full_pa_cotv1_test.json'
     log_file = os.path.join(os.path.dirname(infer_res_file), 'evaluation.log')
     single_main(
         infer_res_file=infer_res_file,
-        task_type='xxj',
+        task_type='full_pa',
         log_file=log_file,
         clear_log=False
     )

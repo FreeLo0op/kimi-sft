@@ -52,14 +52,14 @@ DISTRIBUTED_ARGS="
 echo "start finetune"
 echo "DISTRIBUTED_ARGS: $DISTRIBUTED_ARGS"
 
-PRETRAINED_MODEL_PATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/checkpoint-16000"
-DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/prompt_data_train_semantic_codes.json"
+PRETRAINED_MODEL_PATH=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/pt_model
+DATA_TRAIN=/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/prompt_data_train_semantic_codes.json
 # DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/xxj_sft_eval_semantic_codes.json"
-# DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/old/train/sft_train_semantic_codes.json"
-# DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/old/eval/sft_eval_semantic_codes.json"
-output_dir="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_test/pt_model"
+# DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/sft_train_semantic_codes_2.json"
+# DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/sft_eval_semantic_codes.json"
+output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/pt_model_3
 batch_size=8
-model_max_length=2048
+model_max_length=512
 
 cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
 torchrun $DISTRIBUTED_ARGS finetune.py \

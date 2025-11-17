@@ -50,7 +50,8 @@ def main(
         gpu_id:str,
         model_path:str="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/Kimi_Pa_V1.1_hf_for_inference",
     ):
-    infer_messages = prompt_loader(infer_prompt, if_convert=False)
+    infer_messages = prompt_loader(infer_prompt, if_convert=True)
+    
     model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:{gpu_id}')
     # infer_res = []
     fo = open(output_path, "w", encoding="utf-8")

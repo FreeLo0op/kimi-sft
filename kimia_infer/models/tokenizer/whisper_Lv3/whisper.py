@@ -13,7 +13,7 @@ SAMPLE_RATE = 16000
 N_FFT = 400
 N_MELS = 120
 HOP_LENGTH = 160
-CHUNK_LENGTH = 30
+CHUNK_LENGTH = 30 # change 30 seconds to 5 seconds
 N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE  # 480000 samples in a 30-second chunk
 
 
@@ -178,7 +178,6 @@ class WhisperEncoder(nn.Module):
     def forward(self, audio, kimia_whisper_clip_silence=False):
         if isinstance(audio, torch.Tensor):
             audio = audio[0]
-            # audio = audio.cpu().numpy()
             if audio.dtype == torch.bfloat16:
                 audio = audio.float().cpu().numpy()
             else:
@@ -186,24 +185,28 @@ class WhisperEncoder(nn.Module):
 
         time_step = 0
         audios = []
-        while time_step * 16000 < audio.shape[0]:
-            audio_segment = audio[time_step * 16000 : (time_step + 30) * 16000]
+        # slice audio into CHUNK_LENGTH-second segments using constants
+        while time_step * SAMPLE_RATE < audio.shape[0]:
+            start = time_step * SAMPLE_RATE
+            end = (time_step + CHUNK_LENGTH) * SAMPLE_RATE
+            audio_segment = audio[start:end]
             audios.append(audio_segment)
-            time_step += 30
+            time_step += CHUNK_LENGTH
 
         final_audio_embedding = []
 
+        # expected number of mel frames for a full chunk
+        expected_frames = N_SAMPLES // HOP_LENGTH
+
         for audio_segment in audios:
             # import pdb; pdb.set_trace()
-            assert audio_segment.shape[0] <= 480000
+            assert audio_segment.shape[0] <= N_SAMPLES
             L = audio_segment.shape[0]
-            token_len = (L - 1) // (
-                160 * 8
-            ) + 1  # to match huggingface logic, with use attention mask to control the length and the slice with mask[:, ::160], also match the glm4 12.5 logic
+            token_len = (L - 1) // (HOP_LENGTH * 8) + 1  # use HOP_LENGTH constant for robustness
 
             pad_audio = pad_or_trim(audio_segment.flatten())
-            mel = log_mel_spectrogram(pad_audio)  # torch.Size([80, 3000])
-            assert mel.shape[1] == 3000
+            mel = log_mel_spectrogram(pad_audio)  # torch.Size([80, expected_frames])
+            assert mel.shape[1] == expected_frames
             if kimia_whisper_clip_silence:
                 input_seq_lens_list = [token_len * 4]
                 input_seq_lens = torch.LongTensor(input_seq_lens_list).to(
