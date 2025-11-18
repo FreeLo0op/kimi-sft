@@ -44,6 +44,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+import copy
 
 import transformers
 from packaging import version
@@ -575,6 +576,9 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
         self.kimia_media_end = config.kimia_media_end
 
         if self.if_extra_num_layers:
+            self.extra_layers = nn.ModuleList(
+                [MoonshotDecoderLayer(config) for _ in range(self.extra_num_layers)]
+            )
             self.extra_norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -613,6 +617,61 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
             )
 
         return combined_attention_mask
+    
+
+    def copy_first_layers_to_extra(self, n: int = 2, src_indices: Optional[list] = None, freeze_src: bool = True):
+        if src_indices is None:
+            src_indices = list(range(n))
+        # 若尚未启用，动态开启 extra 层相关标志
+        self.if_extra_num_layers = True
+        # 创建或覆盖 extra_layers
+        self.extra_layers = nn.ModuleList([copy.deepcopy(self.layers[i]) for i in src_indices])
+        self.extra_num_layers = len(self.extra_layers)
+        # 如果还没有 extra_norm（初始 if_extra_num_layers=False 时不会创建），则现在创建
+        if not hasattr(self, "extra_norm") or self.extra_norm is None:
+            self.extra_norm = Qwen2RMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
+        # 标记进入额外 head 训练路径（影响 forward 中是否使用 extra_norm）
+        self.extra_head_train = True
+        # 额外层参数可训练：使用 named_parameters 打印参数名与形状
+        # 注意：torch Parameter 没有 `.names` 属性，直接打印会报错，因此改为打印 name
+        for name, p in self.extra_layers.named_parameters():
+            p.requires_grad = True
+            # 打印为 extra_layers.<index>.<submodule>... 方便定位
+            print(f"extra_layers.{name}: requires_grad={p.requires_grad}, shape={tuple(p.shape)}")
+        # 冻结原始被复制层
+        # if freeze_src:
+        #     for i in src_indices:
+        #         for p in self.layers[i].parameters():
+        #             p.requires_grad = False
+
+    def freeze_all_except_extra_and_extra_norm(self):
+        for name, p in self.named_parameters():
+            if name.startswith("extra_layers") or name.startswith("extra_norm"):
+                p.requires_grad = True
+            else:
+                p.requires_grad = False
+
+    def freeze_all(self):
+        for p in self.parameters():
+            p.requires_grad = False
+
+    def unfreeze_all(self):
+        for p in self.parameters():
+            p.requires_grad = True
+
+    def freeze_prefix(self, prefixes):
+        if isinstance(prefixes, str):
+            prefixes = [prefixes]
+        for name, p in self.named_parameters():
+            if any(name.startswith(pref) for pref in prefixes):
+                p.requires_grad = False
+
+    def unfreeze_prefix(self, prefixes):
+        if isinstance(prefixes, str):
+            prefixes = [prefixes]
+        for name, p in self.named_parameters():
+            if any(name.startswith(pref) for pref in prefixes):
+                p.requires_grad = True
 
     def forward(
         self,
@@ -802,26 +861,49 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
             )
 
             hidden_states = layer_outputs[0]
-
             if use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
             if idx == self.kimia_mimo_transformer_from_layer_index:
                 mimo_hidden_states = hidden_states.clone()
-            if idx == self.extra_num_layers:
+
+            if idx == self.extra_num_layers and self.extra_head_train:
+                mimo_hidden_states = hidden_states.clone()
+                for extra_idx, extra_layer in enumerate(self.extra_layers):
+                    past_key_value = (
+                        past_key_values[
+                            extra_idx + self.extra_num_layers
+                        ]
+                        if past_key_values is not None
+                        else None
+                    )
+                    extra_outputs = extra_layer(
+                        hidden_states,
+                        attention_mask=attention_mask,
+                        position_ids=position_ids,
+                        past_key_value=past_key_value,
+                        output_attentions=output_attentions,
+                        use_cache=use_cache,
+                        padding_mask=padding_mask,
+                    )
+                    extra_hidden_states = extra_outputs[0]
+                    if use_cache:
+                        next_decoder_cache += (
+                            extra_outputs[2 if output_attentions else 1],
+                        )
+                    if output_attentions:
+                        all_self_attns += (extra_outputs[1],)
+                extra_hidden_states = self.extra_norm(extra_hidden_states)
+                break
+            else:
                 extra_hidden_states = hidden_states.clone()
-                if self.extra_head_train:
-                    mimo_hidden_states = hidden_states.clone()
-                    break
 
         hidden_states = self.norm(hidden_states)
-        extra_hidden_states = self.extra_norm(extra_hidden_states)
+    
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-
         if self.skip_audio_transformer:
             pass
         else:
@@ -1040,3 +1122,28 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+    
+    def activate_extra_layers(self, n: int = 2, src_indices: Optional[list] = None, freeze_src: bool = True, freeze_others: bool = True):
+        """一键复制前 n 层到 extra_layers，选择性冻结原层与其它层。
+        Args:
+            n: 复制层数量（当 src_indices 未指定时使用前 n 层）
+            src_indices: 自定义复制的层索引列表（优先于 n）
+            freeze_src: 是否冻结被复制的原始层参数
+            freeze_others: 是否在复制后只保留 extra_layers/extra_norm 可训练
+        """
+        self.model.copy_first_layers_to_extra(n=n, src_indices=src_indices, freeze_src=freeze_src)
+        if freeze_others:
+            # self.model.freeze_all_except_extra_and_extra_norm()
+            self.model.freeze_all()
+            self.model.unfreeze_prefix(['extra_head', 'extra_layers', 'extra_norm'])
+        # # 输出当前可训练参数统计
+        # self.print_trainable_summary()
+
+    # def copy_first_layers_to_extra(self, n: int = 2, src_indices: Optional[list] = None, freeze_src: bool = True):
+    #     """透传底层 copy 方法，便于外部脚本直接调用。"""
+    #     self.model.copy_first_layers_to_extra(n=n, src_indices=src_indices, freeze_src=freeze_src)
+
+    # def freeze_all_except_extra_and_extra_norm(self):
+    #     """透传底层只保留 extra_layers / extra_norm 可训练的方法。"""
+    #     self.model.freeze_all_except_extra_and_extra_norm()
+    #     self.print_trainable_summary()

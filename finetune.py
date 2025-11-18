@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 import json
+import sys
 import logging
 import os
 import glob
@@ -159,7 +160,8 @@ def compute_loss(outputs, labels, num_items_in_batch=None):
     # loss = audio_loss + text_loss
     # logger.info(f"Text loss: {text_loss.item():.4f}, Extra loss: {extra_loss.item():.4f}")
     loss = text_loss + extra_loss
-    return text_loss
+
+    return extra_loss
     return loss
 
 def train():
@@ -202,9 +204,10 @@ def train():
         device_map=None,
         **model_load_kwargs
     )
-    # model.freeze_all()
-    # model.unfreeze_prefix(['extra_head'])
-    # model.print_trainable_summary()
+    # 第一阶段结束后切换到第二阶段
+    model.activate_extra_layers(n=2, freeze_src=True, freeze_others=True)
+    model.freeze_prefix(['whisper_model', 'lm_head', 'mimo_output'])
+    model.print_trainable_summary()
     # model.config.use_cache = False
     
     text_tokenizer = AutoTokenizer.from_pretrained(

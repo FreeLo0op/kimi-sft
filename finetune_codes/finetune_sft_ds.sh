@@ -52,16 +52,17 @@ DISTRIBUTED_ARGS="
 echo "start finetune"
 echo "DISTRIBUTED_ARGS: $DISTRIBUTED_ARGS"
 
-PRETRAINED_MODEL_PATH=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/pt_model
+PRETRAINED_MODEL_PATH=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.5/pt_model
 DATA_TRAIN=/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/prompt_data_train_semantic_codes.json
-# DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/xxj_sft_eval_semantic_codes.json"
+# DATA_EVAL=/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/xxj_sft_eval_semantic_codes.json
+
 # DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/sft_train_semantic_codes_2.json"
 # DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/sft_eval_semantic_codes.json"
-output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/pt_model_3
+output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.5/pt_model_2
 batch_size=8
-model_max_length=512
+model_max_length=1024
 
-cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
+cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft-2/kimi-sft
 torchrun $DISTRIBUTED_ARGS finetune.py \
     --model_name_or_path $MODEL \
     --model_path $PRETRAINED_MODEL_PATH \
@@ -88,8 +89,8 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --model_max_length $model_max_length \
     --gradient_checkpointing True \
     --lazy_preprocess True \
-    --deepspeed finetune_codes/ds_config_zero3.json
+    --deepspeed finetune_codes/ds_config_zero2.json
 
 
-cp /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft/finetune_codes/finetune_sft_ds.sh $output_dir/finetune_sft_ds.sh.backup
+cp /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft-2/kimi-sft/finetune_codes/finetune_sft_ds.sh $output_dir/finetune_sft_ds.sh.backup
 echo "Finetune process completed."

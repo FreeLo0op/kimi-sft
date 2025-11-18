@@ -8,22 +8,22 @@ if [ "$convert" == "true" ]; then
     echo "Converting model for inference..."
 
     model_name=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B
-    input_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/pt_model_3
-    output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/model_infer_3
+    input_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.5/pt_model_2
+    output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.5/model_infer_2
 
-    cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
+    cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft-2/kimi-sft
     python -m finetune_codes.model --model_name $model_name \
         --action "export_model" \
         --input_dir $input_dir \
         --output_dir $output_dir
     echo "Model conversion completed."
 fi
-cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
+cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft-2/kimi-sft
 
-testDataset_list=/mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft/utils/configs/testDataset.list
+testDataset_list=/mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft-2/kimi-sft/utils/configs/testDataset.list
 root_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/sft/test'
-output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/model_infer_3/infer_res
-model_path=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/model_infer_3
+model_path=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.5/model_infer_2
+output_dir=${model_path}/infer_res
 
 
 if [[ ! -f "$testDataset_list" ]]; then

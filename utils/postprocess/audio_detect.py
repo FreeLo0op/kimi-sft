@@ -36,5 +36,5 @@ def main(
     analyze_audio_detection_results(y_true, y_pred, labels)
 
 if __name__ == "__main__":
-    infer_result_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/model_infer_3/infer_res/infer_prompt_data_test.jsonl'
+    infer_result_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.5/model_infer_2/infer_res/infer_prompt_data_test.jsonl'
     main(infer_result_file)
