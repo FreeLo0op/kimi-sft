@@ -114,13 +114,13 @@ def pcc_compute(true_list:list, pred_list:list, dataset_name:str=None, logger=No
     # 使用logger记录结果
     if logger:
         logger.log_metric_result("PCC", pcc, dataset_name)
-        try:
-            logger.info("混淆矩阵:")
-            cm = confusion_matrix(true_list, pred_list)
-            for line in np.array2string(cm).splitlines():
-                logger.info(line)
-        except Exception as e:
-            pass
+        # try:
+        #     logger.info("混淆矩阵:")
+        #     cm = confusion_matrix(true_list, pred_list)
+        #     for line in np.array2string(cm).splitlines():
+        #         logger.info(line)
+        # except Exception as e:
+        #     pass
     else:
         if dataset_name:
             print(f"[{dataset_name}] PCC: {pcc:.4f}")
@@ -222,17 +222,17 @@ def acc_with_threshold(true_list:list, pred_list:list, dataset_name:str=None, th
     return acc
 
 def text_normalize(text):
-        if isinstance(text, list):
-            text = ' '.join(text)
-        # print('原始文本:', text)
-        text = text.strip()
-        text = text.lower()
-        text = en_tn_model.normalize(text)
-        text = re.sub(r'[。，、！？：；“”‘’（）【】《》—\,\.\?\!\[\]\\\(\)\'\-]', ' ', text)
-        # 中文字符前后加空格
-        text = re.sub(r'([\u4e00-\u9fa5])', r' \1 ', text)
-        # 多个空格合并为一个
-        text = re.sub(r' +', ' ', text)
-        text = re.sub(r'\n', '', text)
-        # print('处理后文本:', text)
-        return text.split()
+    if isinstance(text, list):
+        text = ' '.join(text)
+    # print('原始文本:', text)
+    text = text.strip()
+    text = text.lower()
+    # text = en_tn_model.normalize(text)
+    text = re.sub(r'[。，、！？：；“”‘’（）【】《》—\,\.\?\!\[\]\\\(\)\'\-]', ' ', text)
+    # 中文字符前后加空格
+    text = re.sub(r'([\u4e00-\u9fa5])', r' \1 ', text)
+    # 多个空格合并为一个
+    text = re.sub(r' +', ' ', text)
+    text = re.sub(r'\n', '', text)
+    # print('处理后文本:', text)
+    return text.split()

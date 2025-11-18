@@ -131,25 +131,32 @@ class KimiAPromptManager:
                 kimia_content_msg.audio_append(self.extra_tokens.kimia_user_msg_start)
                 kimia_content_msg.text_append(self.extra_tokens.kimia_text_blank)
             elif role == "assistant":
-                kimia_content_msg.audio_append(
-                    self.extra_tokens.kimia_assistant_msg_start
-                )
-                kimia_content_msg.text_append(self.extra_tokens.kimia_text_blank)
+                # kimia_content_msg.audio_append(
+                #     self.extra_tokens.kimia_assistant_msg_start
+                # )
+                # kimia_content_msg.text_append(self.extra_tokens.kimia_text_blank)
+                kimia_content_msg.text_append(self.extra_tokens.kimia_assistant_msg_start)
+                kimia_content_msg.audio_append(self.extra_tokens.kimia_text_blank)
+
             else:
                 raise NotImplementedError(f"role: {role}")
 
         if message["message_type"] == "text":
             text = message["content"]
             text_tokens = self._tokenize_text(text)
-
-            kimia_content_msg.text_extend(text_tokens, has_loss)
-            kimia_content_msg.audio_extend(
-                [self.extra_tokens.kimia_text_blank] * len(text_tokens)
-            )
-
-            if role == "assistant":
+            if role == 'user':
+                kimia_content_msg.text_extend(text_tokens, has_loss)
+                kimia_content_msg.audio_extend(
+                    [self.extra_tokens.kimia_text_blank] * len(text_tokens)
+                )
+            elif role == "assistant":
+                kimia_content_msg.text_extend(text_tokens, has_loss)
                 kimia_content_msg.text_append(self.extra_tokens.kimia_text_eos, has_loss) # eos for text stream
-                kimia_content_msg.audio_append(self.extra_tokens.kimia_text_blank, audio_token_loss_mask=False)
+                kimia_content_msg.audio_extend(
+                    [self.extra_tokens.kimia_text_blank] * (len(text_tokens) + 1)
+                )
+                # kimia_content_msg.text_append(self.extra_tokens.kimia_text_eos, has_loss) # eos for text stream
+                # kimia_content_msg.audio_append(self.extra_tokens.kimia_text_blank, audio_token_loss_mask=False)
 
         elif message["message_type"] == "audio":
             if "audio_tokens" in message:
@@ -213,7 +220,8 @@ class KimiAPromptManager:
             "content": str
         }
         """
-        assert output_type in ["text", "both"]
+        # assert output_type in ["text", "both"]
+        assert output_type == 'text'
 
         msgs: List[KimiAContent] = []
         tokenize_role = True
@@ -259,8 +267,8 @@ class KimiAPromptManager:
             assistant_start_msg = self.tokenize_message(
                     message={
                         "role": "assistant",
-                    "message_type": None,
-                },
+                        "message_type": None,
+                    },
                 tokenize_role=True,
                 has_ct_token=False,
                 has_msg_end_token=False,

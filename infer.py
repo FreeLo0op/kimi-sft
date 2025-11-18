@@ -61,7 +61,7 @@ def main(
         audio = infer_messages[i][1]["content"]
         # audio, label = infer_messages[i][0]["content"]
 
-        _, text = model.generate(messages, **sampling_params, output_type="text")
+        text = model.generate(messages, **sampling_params, output_type="text")
         # wav, text = model.generate(messages, **sampling_params, output_type="both")
 
         infer_res = {

@@ -7,13 +7,13 @@ import logging
 def main(
     infer_res_dir:str,
     if_base_model:bool=False,
-    infer_config_file:str=None,
-    log_file:str=None,
+    log_file:str='evaluation.log',
     clear_log:bool=True,
 ):
     # 设置日志记录器 - 如果log_file为None，则只输出到控制台
+    log_file = os.path.join(infer_res_dir, log_file)
     logger = set_logger(log_file, clear_existing=clear_log)
-    
+
     dataset_info_dict = defaultdict(list)
     for file in os.listdir(infer_res_dir):
         dataset_name = file.replace('infer_', '').replace('.json', '')
@@ -54,6 +54,12 @@ def main(
             get_repeat_reading_res(values, logger)
         elif 'asr' in key:
             get_asr_res(values, logger)
+        elif 'full_pa' in key:
+            get_full_pa_res(values, dataset_name, logger)
+        elif 'ket_pa' in key:
+            get_ket_pa_res(values, dataset_name, logger)
+        elif 'xxj' in key:
+            get_xxj_res(values, dataset_name, logger)
         elif 'open_pa' in key:
             # Open PA 任务处理，可以指定输出CSV文件和URL文件路径
             output_csv = '/mnt/pfs_l2/jieti_team/SFT/hupeng/mdd_lm/saves/post_training/base_model_v5/multi_pa_v14_6/infers/model1_op_ket'  # 可以根据需要设置输出路径
@@ -103,19 +109,20 @@ def single_main(infer_res_file:str, task_type:str, log_file:str=None, clear_log:
 
 if __name__ == "__main__":
 
-    # main(
-    #     infer_res_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/github/Kimi-Audio/output/infer_res/Kimi_Pa_V1.1', 
-    #     if_base_model=False, 
-    #     infer_config_file=None, 
-    #     log_file='evaluation.log', 
-    #     clear_log=True
-    # )
-
-    infer_res_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/model_infer_3/infer_res/infer_tal-k12-td2_full_pa_cotv1_test.json'
-    log_file = os.path.join(os.path.dirname(infer_res_file), 'evaluation.log')
-    single_main(
-        infer_res_file=infer_res_file,
-        task_type='full_pa',
-        log_file=log_file,
-        clear_log=False
+    main(
+        infer_res_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/model_infer_3/infer_res', 
+        if_base_model=False, 
+        log_file='evaluation_all.log', 
+        clear_log=True
     )
+
+    # infer_res_dir = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.4/model_infer_3/infer_res'
+    # infer_res_file = 'infer_speechocean762_phoneme_pa_cotv2_test.json'
+    # infer_res_file = os.path.join(infer_res_dir, infer_res_file)
+    # log_file = os.path.join(os.path.dirname(infer_res_file), 'evaluation.log')
+    # single_main(
+    #     infer_res_file=infer_res_file,
+    #     task_type='phoneme_pa',
+    #     log_file=log_file,
+    #     clear_log=False
+    # )

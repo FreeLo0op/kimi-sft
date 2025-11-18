@@ -1,7 +1,7 @@
 import os
-import tqdm
 import torch
 from loguru import logger
+from tqdm import tqdm
 from huggingface_hub import cached_assets_path
 from transformers import AutoModelForCausalLM
 
@@ -39,15 +39,14 @@ class KimiAudio(object):
             kimia_text_audiodelaytokens=self.kimia_text_audiodelaytokens,
             device=self.device
         )
-
-        if load_detokenizer:
-            logger.info(f"Loading detokenizer")
-            # need to compile extension moudules for the first time, it may take several minutes.
-            vocoder_cache_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B'
-            self.detokenizer = get_audio_detokenizer(vocoder_cache_path)
-        else:
-            # in this case, you're not allowed to generate audio(wav)
-            self.detokenizer = None
+        # if load_detokenizer:
+        #     logger.info(f"Loading detokenizer")
+        #     # need to compile extension moudules for the first time, it may take several minutes.
+        #     vocoder_cache_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B'
+        #     self.detokenizer = get_audio_detokenizer(vocoder_cache_path)
+        # else:
+        #     # in this case, you're not allowed to generate audio(wav)
+        #     self.detokenizer = None
 
         self.extra_tokens = self.prompt_manager.extra_tokens
         self.eod_ids = [self.extra_tokens.msg_end, self.extra_tokens.media_end]
@@ -112,12 +111,8 @@ class KimiAudio(object):
         valid_text_length = 0
         valid_audio_length = 0
 
-        # for i in tqdm.tqdm(
-        #     range(max_new_tokens), desc="Generating tokens", disable=False
-        # ):
-        for i in range(max_new_tokens):
+        for i in tqdm(range(max_new_tokens), desc="Generating", disable=False):
             # audio_logits, text_logits, past_key_values 
-            
             res = self.alm.forward(
                 input_ids=decoder_input_audio_ids,
                 text_input_ids=decoder_input_text_ids,
@@ -127,7 +122,7 @@ class KimiAudio(object):
                 past_key_values=past_key_values,
                 return_dict=False,
             )
-            audio_logits, text_logits, extra_logits, past_key_values = res
+            text_logits, past_key_values = res
             # Sample text token using the sampler
             next_token_text = sampler.sample_text_logits(
                 text_logits, recent_tokens=text_previous_tokens[:i] if i > 0 else None
@@ -137,9 +132,9 @@ class KimiAudio(object):
             # )
 
             # Sample audio token using the sampler
-            next_audio_token = sampler.sample_audio_logits(
-                audio_logits, recent_tokens=previous_audio_tokens[:i] if i > 0 else None
-            )
+            # next_audio_token = sampler.sample_audio_logits(
+            #     audio_logits, recent_tokens=previous_audio_tokens[:i] if i > 0 else None
+            # )
 
             if text_stream_is_finished:
                 next_token_text.fill_(self.extra_tokens.kimia_text_blank)
@@ -150,24 +145,25 @@ class KimiAudio(object):
 
             text_previous_tokens[i : i + 1] = next_token_text
 
-            if i < self.kimia_text_audiodelaytokens:
-                next_audio_token.fill_(self.extra_tokens.kimia_text_blank)
-            else:
-                if output_type == "text":
-                    next_audio_token.fill_(self.extra_tokens.kimia_text_blank)
-                else:
-                    valid_audio_length += 1
+            # if i < self.kimia_text_audiodelaytokens:
+            #     next_audio_token.fill_(self.extra_tokens.kimia_text_blank)
+            # else:
+            #     if output_type == "text":
+            #         next_audio_token.fill_(self.extra_tokens.kimia_text_blank)
+            #     else:
+            #         valid_audio_length += 1
 
-            previous_audio_tokens[i : i + 1] = next_audio_token
+            # previous_audio_tokens[i : i + 1] = next_audio_token
 
-            audio_stream_is_finished = next_audio_token.item() in self.eod_ids
+            # audio_stream_is_finished = next_audio_token.item() in self.eod_ids
 
-            if (
-                output_type == "text"
-                and text_stream_is_finished
-                or output_type == "both"
-                and audio_stream_is_finished
-            ):
+            # if (
+            #     output_type == "text"
+            #     and text_stream_is_finished
+            #     or output_type == "both"
+            #     and audio_stream_is_finished
+            # ):
+            if text_stream_is_finished:
                 return_text_tokens = (
                     text_previous_tokens[:valid_text_length]
                     .detach()
@@ -175,19 +171,20 @@ class KimiAudio(object):
                     .numpy()
                     .tolist()
                 )
-                return_audio_tokens = (
-                    previous_audio_tokens[
-                        self.kimia_text_audiodelaytokens : valid_audio_length
-                        + self.kimia_text_audiodelaytokens
-                    ]
-                    .detach()
-                    .cpu()
-                    .numpy()
-                    .tolist()
-                )
-                return return_audio_tokens, return_text_tokens
+                # return_audio_tokens = (
+                #     previous_audio_tokens[
+                #         self.kimia_text_audiodelaytokens : valid_audio_length
+                #         + self.kimia_text_audiodelaytokens
+                #     ]
+                #     .detach()
+                #     .cpu()
+                #     .numpy()
+                #     .tolist()
+                # )
+                # return return_audio_tokens, return_text_tokens
+                return return_text_tokens
             else:
-                decoder_input_audio_ids = next_audio_token.unsqueeze(1)
+                # decoder_input_audio_ids = next_audio_token.unsqueeze(1)
                 decoder_input_text_ids = next_token_text.unsqueeze(1)
 
                 decoder_position_ids = (
@@ -204,17 +201,18 @@ class KimiAudio(object):
         return_text_tokens = (
             text_previous_tokens[:valid_text_length].detach().cpu().numpy().tolist()
         )
-        return_audio_tokens = (
-            previous_audio_tokens[
-                self.kimia_text_audiodelaytokens : valid_audio_length
-                + self.kimia_text_audiodelaytokens
-            ]
-            .detach()
-            .cpu()
-            .numpy()
-            .tolist()
-        )
-        return return_audio_tokens, return_text_tokens
+        # return_audio_tokens = (
+        #     previous_audio_tokens[
+        #         self.kimia_text_audiodelaytokens : valid_audio_length
+        #         + self.kimia_text_audiodelaytokens
+        #     ]
+        #     .detach()
+        #     .cpu()
+        #     .numpy()
+        #     .tolist()
+        # )
+        # return return_audio_tokens, return_text_tokens
+        return return_text_tokens
 
     @torch.inference_mode()
     def generate(
@@ -235,7 +233,8 @@ class KimiAudio(object):
         ## 比如，对于ASR任务，一定是: text-instruction/audio-instruction + audio-content, 我理解content和instruction是不能换位置的
         ## assistant前必须有user等等，我觉得最好做一下check
 
-        assert output_type in ["text", "both"]
+        # assert output_type in ["text", "both"]
+        assert output_type == 'text'
 
         history = self.prompt_manager.get_prompt(chats, output_type=output_type)
 
@@ -249,14 +248,16 @@ class KimiAudio(object):
             max_new_tokens = int(12.5 * 120) - audio_input_ids.shape[1]
         else:
             if max_new_tokens == -1:
-                max_new_tokens = 7500 - audio_input_ids.shape[1]
+                max_new_tokens = 64
+                # max_new_tokens = 7500 - audio_input_ids.shape[1]
 
         audio_input_ids = audio_input_ids.to(self.device)
         text_input_ids = text_input_ids.to(self.device)
         is_continuous_mask = is_continuous_mask.to(self.device)
         audio_features = [f.to(self.device) for f in audio_features]
 
-        generated_wav_tokens, generated_text_tokens = self._generate_loop(
+        # generated_wav_tokens, generated_text_tokens = self._generate_loop(
+        generated_text_tokens = self._generate_loop(
             audio_input_ids=audio_input_ids,
             text_input_ids=text_input_ids,
             max_new_tokens=max_new_tokens,
@@ -272,23 +273,22 @@ class KimiAudio(object):
             continous_feature=audio_features,
             output_type=output_type,
         )
-
-        generated_wav_tokens = [
-            t for t in generated_wav_tokens if t >= self.kimia_token_offset
-        ]  #  filter out the illegal tokens
-
-        generated_wav_tokens = torch.tensor(generated_wav_tokens).unsqueeze(0)
-        generated_wav_tokens = generated_wav_tokens - self.kimia_token_offset
         generated_text_tokens = [
             t for t in generated_text_tokens if t < self.kimia_token_offset
         ]
         generated_text = self.detokenize_text(generated_text_tokens)
-        if self.detokenizer is not None and output_type == "both":
-            generated_wav = self.detokenize_audio(generated_wav_tokens)
-        else:
-            generated_wav = None
 
-        return generated_wav, generated_text
+        # generated_wav_tokens = [
+        #     t for t in generated_wav_tokens if t >= self.kimia_token_offset
+        # ]  #  filter out the illegal tokens
+        # generated_wav_tokens = torch.tensor(generated_wav_tokens).unsqueeze(0)
+        # generated_wav_tokens = generated_wav_tokens - self.kimia_token_offset
+        # if self.detokenizer is not None and output_type == "both":
+        #     generated_wav = self.detokenize_audio(generated_wav_tokens)
+        # else:
+        #     generated_wav = None
+        # return generated_wav, generated_text
+        return generated_text
 
     def detokenize_audio(self, audio_tokens):
         if self.detokenizer is None:

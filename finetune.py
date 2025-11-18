@@ -30,7 +30,7 @@ random.seed(42)
 @dataclass
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B")
-    model_path: str = field(
+    model_path: Optional[str] = field(
         default=None, metadata={"help": "Path to the pretrained model."}
     )
 
@@ -142,25 +142,15 @@ def make_supervised_data_module(
 
 def compute_loss(outputs, labels, num_items_in_batch=None):
     # remove audio loss
-
-    audio_logits, text_logits, extra_logits = outputs.logits
-    # text_logits = outputs.logits[0]
+    text_logits = outputs.logits[0]
 
     audio_labels, text_labels, audio_loss_mask, text_loss_mask = labels
-    # text_labels, text_loss_mask = labels
 
-    # audio_loss = torch.nn.functional.cross_entropy(audio_logits.view(-1, audio_logits.shape[-1]), audio_labels.view(-1), reduction="none")
     text_loss = torch.nn.functional.cross_entropy(text_logits.view(-1, text_logits.shape[-1]), text_labels.view(-1), reduction="none")
-    extra_loss = torch.nn.functional.cross_entropy(extra_logits.view(-1, extra_logits.shape[-1]), text_labels.view(-1), reduction="none")
 
-    # audio_loss = (audio_loss * audio_loss_mask.view(-1)).sum() / (audio_loss_mask.view(-1).sum() + 1e-4)
     text_loss = (text_loss * text_loss_mask.view(-1)).sum() / (text_loss_mask.view(-1).sum() + 1e-4)
-    extra_loss = (extra_loss * text_loss_mask.view(-1)).sum() / (text_loss_mask.view(-1).sum() + 1e-4)
-    # loss = audio_loss + text_loss
-    # logger.info(f"Text loss: {text_loss.item():.4f}, Extra loss: {extra_loss.item():.4f}")
-    loss = text_loss + extra_loss
+
     return text_loss
-    return loss
 
 def train():
     global local_rank

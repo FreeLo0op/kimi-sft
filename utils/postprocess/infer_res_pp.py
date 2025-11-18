@@ -872,10 +872,10 @@ def get_full_pa_res(infer_infos, dataset_name: str, logger):
 
             # 临时修正真实标签，测试
             if snt_acc_pre == 0 and snt_flu_pre == 0:
-                logger.warning(f"{key} 句子评测结果为0，将单词全部设置为0")
-                logger.info(f"{word_pre_scores}")
-                logger.info(f"{word_true_scores}")
-                logger.info(f"{line['audio'][0]}")
+                # logger.warning(f"{key} 句子评测结果为0，将单词全部设置为0")
+                # logger.info(f"{word_pre_scores}")
+                # logger.info(f"{word_true_scores}")
+                # logger.info(f"{line['audio'][0]}")
                 word_true_scores = [0] * len(word_pre_scores)
             all_word_prd_scores.extend(word_pre_scores)
             all_word_true_scores.extend(word_true_scores)
