@@ -45,7 +45,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 import copy
-
+import sys
 import transformers
 from packaging import version
 
@@ -544,16 +544,16 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
 
     def __init__(self, config: KimiAudioConfig):
         super().__init__(config)
-        self.skip_audio_transformer = True
-        self.extra_head_train = False
-        self.if_extra_num_layers = True
-        self.extra_num_layers = 2
+        self.load_audio_head = False
+        self.audio_detect_layers_train = config.audio_detect_layers_train
+        self.audio_detect_layers_num = config.audio_detect_layers_num
+        self.load_audio_detect_layers = config.load_audio_detect_layers
+
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.kimia_mimo_transformer_from_layer_index = (
             config.kimia_mimo_transformer_from_layer_index
         )
-
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.hidden_size, self.padding_idx
         )
@@ -561,13 +561,23 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
             [MoonshotDecoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # self.student_layers = nn.ModuleList(
+        #     [MoonshotDecoderLayer(config) for _ in range(9)]
+        # )
+        # self.student_norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # self.layers = self.student_layers
+        # self.norm = self.student_norm
+        
 
         # extra 1B audio transformers
-        if not self.skip_audio_transformer:
+        if self.load_audio_head:
             self.mimo_layers = nn.ModuleList(
                 [MoonshotDecoderLayer(config) for _ in range(config.kimia_mimo_layers)]
             )
             self.mimo_norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        else:
+            self.mimo_layers = None
+            self.mimo_norm = None
 
         self.use_whisper_feature = config.use_whisper_feature
         if self.use_whisper_feature:
@@ -575,11 +585,14 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
         self.kimia_media_begin = config.kimia_media_begin
         self.kimia_media_end = config.kimia_media_end
 
-        if self.if_extra_num_layers:
-            self.extra_layers = nn.ModuleList(
-                [MoonshotDecoderLayer(config) for _ in range(self.extra_num_layers)]
+        if self.load_audio_detect_layers:
+            self.audio_detect_layers = nn.ModuleList(
+                [MoonshotDecoderLayer(config) for _ in range(self.audio_detect_layers_num)]
             )
-            self.extra_norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.audio_detect_norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        else:
+            self.audio_detect_layers = None
+            self.audio_detect_norm = None
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -618,60 +631,20 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
 
         return combined_attention_mask
     
-
-    def copy_first_layers_to_extra(self, n: int = 2, src_indices: Optional[list] = None, freeze_src: bool = True):
-        if src_indices is None:
-            src_indices = list(range(n))
+    def copy_layers(self, n: int = 2):
         # 若尚未启用，动态开启 extra 层相关标志
-        self.if_extra_num_layers = True
-        # 创建或覆盖 extra_layers
-        self.extra_layers = nn.ModuleList([copy.deepcopy(self.layers[i]) for i in src_indices])
-        self.extra_num_layers = len(self.extra_layers)
-        # 如果还没有 extra_norm（初始 if_extra_num_layers=False 时不会创建），则现在创建
-        if not hasattr(self, "extra_norm") or self.extra_norm is None:
-            self.extra_norm = Qwen2RMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
-        # 标记进入额外 head 训练路径（影响 forward 中是否使用 extra_norm）
-        self.extra_head_train = True
-        # 额外层参数可训练：使用 named_parameters 打印参数名与形状
-        # 注意：torch Parameter 没有 `.names` 属性，直接打印会报错，因此改为打印 name
-        for name, p in self.extra_layers.named_parameters():
+        self.load_audio_detect_layers = True
+        self.audio_detect_layers_train = True
+        # 创建或覆盖 audio_detect_layers
+        self.audio_detect_layers = nn.ModuleList([copy.deepcopy(self.layers[i]) for i in range(n)])
+        self.audio_detect_layers_num = len(self.audio_detect_layers)
+
+        if not hasattr(self, "audio_detect_norm") or self.audio_detect_norm is None:
+            self.audio_detect_norm = Qwen2RMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
+
+        for name, p in self.audio_detect_layers.named_parameters():
             p.requires_grad = True
-            # 打印为 extra_layers.<index>.<submodule>... 方便定位
-            print(f"extra_layers.{name}: requires_grad={p.requires_grad}, shape={tuple(p.shape)}")
-        # 冻结原始被复制层
-        # if freeze_src:
-        #     for i in src_indices:
-        #         for p in self.layers[i].parameters():
-        #             p.requires_grad = False
-
-    def freeze_all_except_extra_and_extra_norm(self):
-        for name, p in self.named_parameters():
-            if name.startswith("extra_layers") or name.startswith("extra_norm"):
-                p.requires_grad = True
-            else:
-                p.requires_grad = False
-
-    def freeze_all(self):
-        for p in self.parameters():
-            p.requires_grad = False
-
-    def unfreeze_all(self):
-        for p in self.parameters():
-            p.requires_grad = True
-
-    def freeze_prefix(self, prefixes):
-        if isinstance(prefixes, str):
-            prefixes = [prefixes]
-        for name, p in self.named_parameters():
-            if any(name.startswith(pref) for pref in prefixes):
-                p.requires_grad = False
-
-    def unfreeze_prefix(self, prefixes):
-        if isinstance(prefixes, str):
-            prefixes = [prefixes]
-        for name, p in self.named_parameters():
-            if any(name.startswith(pref) for pref in prefixes):
-                p.requires_grad = True
+            print(f"Copy audio_detect_layers.{name}: requires_grad={p.requires_grad}, shape={tuple(p.shape)}")
 
     def forward(
         self,
@@ -827,7 +800,6 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
             else:
                 whisper_emb = torch.zeros_like(audio_emb)
                 whisper_emb = whisper_emb.to(device)
-
             
             if text_input_ids is not None and text_input_ids.sum() != 0:
                 inputs_embeds = audio_emb + self.embed_tokens(text_input_ids)
@@ -843,70 +815,61 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
         
-        for idx, decoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
+        if self.load_audio_detect_layers:
+            for idx, decoder_layer in enumerate(self.audio_detect_layers):
+                past_key_value = (
+                    past_key_values[idx] if past_key_values is not None else None
+                )
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_value,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    padding_mask=padding_mask,
+                )
 
-            past_key_value = (
-                past_key_values[idx] if past_key_values is not None else None
-            )
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                padding_mask=padding_mask,
-            )
+                hidden_states = layer_outputs[0]
+                if use_cache:
+                    next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
+                if output_attentions:
+                    all_self_attns += (layer_outputs[1],)
+            audio_detect_hidden_states = self.audio_detect_norm(hidden_states)
+            mimo_hidden_states = hidden_states.clone()
+        else:
+            for idx, decoder_layer in enumerate(self.layers):
+                if output_hidden_states:
+                    all_hidden_states += (hidden_states,)
 
-            hidden_states = layer_outputs[0]
-            if use_cache:
-                next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
+                past_key_value = (
+                    past_key_values[idx] if past_key_values is not None else None
+                )
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_value,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    padding_mask=padding_mask,
+                )
 
-            if idx == self.kimia_mimo_transformer_from_layer_index:
-                mimo_hidden_states = hidden_states.clone()
+                hidden_states = layer_outputs[0]
+                if use_cache:
+                    next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
+                if output_attentions:
+                    all_self_attns += (layer_outputs[1],)
 
-            if idx == self.extra_num_layers and self.extra_head_train:
-                mimo_hidden_states = hidden_states.clone()
-                for extra_idx, extra_layer in enumerate(self.extra_layers):
-                    past_key_value = (
-                        past_key_values[
-                            extra_idx + self.extra_num_layers
-                        ]
-                        if past_key_values is not None
-                        else None
-                    )
-                    extra_outputs = extra_layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        position_ids=position_ids,
-                        past_key_value=past_key_value,
-                        output_attentions=output_attentions,
-                        use_cache=use_cache,
-                        padding_mask=padding_mask,
-                    )
-                    extra_hidden_states = extra_outputs[0]
-                    if use_cache:
-                        next_decoder_cache += (
-                            extra_outputs[2 if output_attentions else 1],
-                        )
-                    if output_attentions:
-                        all_self_attns += (extra_outputs[1],)
-                extra_hidden_states = self.extra_norm(extra_hidden_states)
-                break
-            else:
-                extra_hidden_states = hidden_states.clone()
-
+                if idx == self.kimia_mimo_transformer_from_layer_index:
+                    mimo_hidden_states = hidden_states.clone()
+                    audio_detect_hidden_states = hidden_states.clone()
+        mimo_hidden_states = hidden_states.clone()
+        audio_detect_hidden_states = hidden_states.clone()
         hidden_states = self.norm(hidden_states)
-    
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-        if self.skip_audio_transformer:
-            pass
-        else:
+        if self.load_audio_head:
             for idx, decoder_layer in enumerate(self.mimo_layers):
                 if output_hidden_states:
                     all_hidden_states += (mimo_hidden_states,)
@@ -930,7 +893,6 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
 
                 if use_cache:
                     next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
-
             mimo_hidden_states = self.mimo_norm(mimo_hidden_states)
 
             # add hidden states from the last decoder layer
@@ -944,7 +906,7 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
                 for v in [
                     hidden_states,
                     mimo_hidden_states,
-                    extra_hidden_states,
+                    audio_detect_hidden_states,
                     next_cache,
                     all_hidden_states,
                     all_hidden_states,
@@ -953,7 +915,7 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
                 if v is not None
             )
         return BaseModelOutputWithPast(
-            last_hidden_state=(hidden_states, mimo_hidden_states, extra_hidden_states),
+            last_hidden_state=(hidden_states, mimo_hidden_states, audio_detect_hidden_states),
             # last_hidden_state=mimo_hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
@@ -961,7 +923,7 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
         )
 
 class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight", "mimo_output.weight"]
+    _tied_weights_keys = ["lm_head.weight", "mimo_output.weight", "audio_detect_head.weight"]
     config_class = KimiAudioConfig
 
     def __init__(self, config):
@@ -969,13 +931,18 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
         self.model = MoonshotKimiaModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.extra_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.mimo_output = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+        # self.student_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        # self.lm_head = self.student_head
+        self.audio_detect_out = False
+        if config.load_audio_detect_layers:
+            self.audio_detect_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+            self.audio_detect_out = True
+        if config.load_audio_head:
+            self.mimo_output = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Freeze / unfreeze helpers (放到模型类内部)
     def freeze_all(self):
         for p in self.parameters():
             p.requires_grad = False
@@ -999,20 +966,14 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
                 p.requires_grad = True
 
     def freeze_all_except(self, keep_prefixes):
-        # keep_prefixes: list or str -> 所有 name 以这些前缀开头的参数保持 requires_grad=True，其它置 False
         if isinstance(keep_prefixes, str):
             keep_prefixes = [keep_prefixes]
         for name, p in self.named_parameters():
             p.requires_grad = any(name.startswith(pref) for pref in keep_prefixes)
 
     def print_trainable_summary(self):
-        total = 0
-        trainable = 0
         for name, p in self.named_parameters():
-            num = p.numel()
-            total += num
             if p.requires_grad:
-                trainable += num
                 print(f"训练层：{name}: requires_grad={p.requires_grad}, shape={tuple(p.shape)}")
 
     def get_input_embeddings(self):
@@ -1027,12 +988,12 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def get_extra_output_embeddings(self):
-        return self.extra_head
+    def get_audio_detect_output_embeddings(self):
+        return self.audio_detect_head
 
-    def set_extra_output_embeddings(self, new_embeddings):
-        self.extra_head = new_embeddings
-
+    def set_audio_detect_output_embeddings(self, new_embeddings):
+        self.audio_detect_head = new_embeddings
+        
     def set_decoder(self, decoder):
         self.model = decoder
 
@@ -1091,59 +1052,33 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
             return_dict=return_dict,
         )
         if return_dict:
-            hidden_states, mimo_hidden_states, extra_hidden_states = (
+            hidden_states, mimo_hidden_states, audio_detect_hidden_states = (
                 outputs.last_hidden_state[0],
                 outputs.last_hidden_state[1],
                 outputs.last_hidden_state[2],
             )
-            # mimo_hidden_states = outputs.last_hidden_state
         else:
-            hidden_states, mimo_hidden_states = outputs[0], outputs[1]
-            extra_hidden_states = outputs[2]
-            # mimo_hidden_states = outputs[0]
+            hidden_states, mimo_hidden_states, audio_detect_hidden_states = outputs[0], outputs[1], outputs[2]
 
-        audio_logits = self.lm_head(hidden_states)
-        extra_logits = self.extra_head(extra_hidden_states)
-        # logger.info(f"audio_logits shape: {audio_logits.shape}")
-        # logger.info(f"extra_logits shape: {extra_logits.shape}")
-        # text_logits = self.mimo_output(mimo_hidden_states)
-        text_logits = audio_logits
+        text_logits = self.lm_head(hidden_states)
+
+        if self.audio_detect_out:
+            audio_detect_logits = self.audio_detect_head(audio_detect_hidden_states)
+        else:
+            audio_detect_logits = text_logits
+        audio_logits = text_logits
 
         if not return_dict:
-            output = (text_logits, audio_logits, extra_logits) + outputs[3:]
-            # output = (audio_logits,) + outputs[2:]
+            output = (text_logits, audio_logits, audio_detect_logits) + outputs[3:]
             return output
         
         return CausalLMOutputWithPast(
             loss=None,
-            logits=(text_logits, audio_logits, extra_logits),
-            # logits=(audio_logits,),
+            logits=(text_logits, audio_logits, audio_detect_logits),
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
     
-    def activate_extra_layers(self, n: int = 2, src_indices: Optional[list] = None, freeze_src: bool = True, freeze_others: bool = True):
-        """一键复制前 n 层到 extra_layers，选择性冻结原层与其它层。
-        Args:
-            n: 复制层数量（当 src_indices 未指定时使用前 n 层）
-            src_indices: 自定义复制的层索引列表（优先于 n）
-            freeze_src: 是否冻结被复制的原始层参数
-            freeze_others: 是否在复制后只保留 extra_layers/extra_norm 可训练
-        """
-        self.model.copy_first_layers_to_extra(n=n, src_indices=src_indices, freeze_src=freeze_src)
-        if freeze_others:
-            # self.model.freeze_all_except_extra_and_extra_norm()
-            self.model.freeze_all()
-            self.model.unfreeze_prefix(['extra_head', 'extra_layers', 'extra_norm'])
-        # # 输出当前可训练参数统计
-        # self.print_trainable_summary()
-
-    # def copy_first_layers_to_extra(self, n: int = 2, src_indices: Optional[list] = None, freeze_src: bool = True):
-    #     """透传底层 copy 方法，便于外部脚本直接调用。"""
-    #     self.model.copy_first_layers_to_extra(n=n, src_indices=src_indices, freeze_src=freeze_src)
-
-    # def freeze_all_except_extra_and_extra_norm(self):
-    #     """透传底层只保留 extra_layers / extra_norm 可训练的方法。"""
-    #     self.model.freeze_all_except_extra_and_extra_norm()
-    #     self.print_trainable_summary()
+    def activate_audio_detect_layers(self, n: int = 2):
+        self.model.copy_layers(n=n)

@@ -62,6 +62,7 @@ def audio_processor(data_items, prompt_manager, accelerator, batch_size=32):
                 results.append((json.dumps(data, ensure_ascii=False) + '\n', line_idx))
                 processed_audio_count += 1
         except Exception as e:
+            print(f"Error processing audio batch starting at index {i}: {e}")
             pass
 
     return results, processed_audio_count

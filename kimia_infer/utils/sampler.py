@@ -97,7 +97,7 @@ class KimiASampler:
 
     def sample_text_logits(
         self, logits: torch.Tensor, recent_tokens=None
-    ) -> torch.Tensor:
+    ):# -> torch.Tensor:
         """Sample from text logits with top-k, temperature and repetition penalty.
 
         Args:
@@ -136,7 +136,6 @@ class KimiASampler:
 
         # Convert to probabilities with softmax
         logprobs = torch.log_softmax(logits, dim=-1, dtype=torch.float)
-
         # Apply temperature scaling if not greedy
         if self.text_temperature > 1e-6:
             logprobs = logprobs / self.text_temperature
@@ -163,6 +162,14 @@ class KimiASampler:
                 ).squeeze(1)
         else:
             # Greedy sampling (temperature = 0)
+            # print('Greedy sampling activated')
+            # print('logprobs:', logprobs.shape)
             next_token = torch.argmax(logprobs, dim=-1)
+            # print('next_token:', next_token)
 
-        return next_token
+            # 同时获取最大值和索引
+            max_values, _ = torch.max(logprobs, dim=-1)
+            max_probs = torch.exp(max_values) 
+            # print('max_probability:', max_probs)
+            # print('next_token:', next_token)
+        return next_token, max_probs

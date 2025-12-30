@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 MAX_WORKERS = 48
-MAX_AUDIO_DURATION = 30  # seconds
+MAX_AUDIO_DURATION = 25  # seconds
 
 # global config
 WAVPATH_MAP = {
@@ -46,7 +46,7 @@ def check_audio_valid(wavpath:str):
     try:
         waveform, sample_rate = torchaudio.load(wavpath)
         duration = waveform.shape[1] / sample_rate
-        if duration <= MAX_AUDIO_DURATION and sample_rate == 16000:
+        if 0 < duration < MAX_AUDIO_DURATION and sample_rate == 16000:
             return True
         else:
             logger.warning(f"Invalid audio: {wavpath}, duration: {duration}, sample_rate: {sample_rate}")
@@ -92,7 +92,7 @@ def prompt_convert(data, audio_map:dict={}):
             ]
         }
     else:
-        data = Nonel
+        data = None
 
     return data
 
@@ -150,11 +150,12 @@ def main_sft(
         # 对齐
         'next-online-10k_align_cotv2_train.json', 'ertonggushi_align_cotv1_train.json',
         # 音素评测
-        'speechocean762_phoneme_pa_cotv2_train.json', 
+        'speechocean762_phoneme_withcmu_pa_cotv2_train.json', 
+        'tal-k12_phoneme_ipa_pa_cotv2_train.json',
+        'tal-k12_phoneme_withipa_pa_cotv2_train.json',
         'tal-k12_phoneme_recommend_cotv2_train.json',
-        'tal-k12_phoneme_pa_nocot-v1_train.json',
         # 单词评测
-        'speechocean762_word_pa_accuracy_nocot-v2_train.json', 'speechocean762_word_pa_stress_nocot-v2_train.json', 'speechocean762_word_pa_total_nocot-v2_train.json', 'tal-k12_word_pa_accuracy_nocot-v2_train.json', 'xiaoheiban_word_pa_accuracy_nocotv3_train.json',
+        'speechocean762_word_pa_accuracy_nocot-v2_train.json', 'speechocean762_word_pa_total_nocot-v2_train.json', 'tal-k12_word_pa_accuracy_nocot-v2_train.json',
         # 句子评测
         'speechocean762_sent_pa_accuracy_nocot-v2_train.json', 'speechocean762_sent_pa_fluency_nocotv1_train.json', 'speechocean762_sent_pa_prosodic_nocot-v2_train.json', 'speechocean762_sent_pa_total_nocot-v2_train.json', 'tal-k12_sent_pa_accuracy_nocot-v2_train.json', 'next_sent_pa_fluency_nocotv1_train.json', 'xiaohou_sent_pa_accuracy_nocotv3_train.json',
         # 音素、单词、句子三维评测
@@ -177,14 +178,14 @@ def main_sft(
 
     if dataset_type == 'train':
         root_dir = train_root_dir
-        ori_prompts = train_ori_prompts
+        # ori_prompts = train_ori_prompts
     elif dataset_type == 'eval':
         root_dir = eval_root_dir
-        ori_prompts = [item.replace('train.json', 'eval.json') for item in train_ori_prompts]
-
+        # ori_prompts = [item.replace('train.json', 'eval.json') for item in train_ori_prompts]
+    ori_prompts = os.listdir(root_dir)
     new_prompts = []
     for ori_prompt in ori_prompts:
-        if 'xxj' not in ori_prompt:
+        if 'speechocean762' in ori_prompt:
             continue
         prompt_path = os.path.join(root_dir, ori_prompt)
         if not os.path.exists(prompt_path):
@@ -216,11 +217,11 @@ def main_sft(
 if __name__ == "__main__":
     main_sft(
         dataset_type='train',
-        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/xxj_sft_train.json'
+        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/train_25.json'
     )
     main_sft(
         dataset_type='eval',
-        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/xxj_sft_eval.json'
+        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/eval_25.json'
     )
 
     # main_base(

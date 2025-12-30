@@ -7,7 +7,7 @@ import os
 from functools import lru_cache
 from typing import Optional, Union
 from .modeling_whisper import WhisperModel
-
+# from modeling_whisper import WhisperModel
 # hard-coded audio hyperparameters
 SAMPLE_RATE = 16000
 N_FFT = 400
@@ -233,3 +233,21 @@ class WhisperEncoder(nn.Module):
     def tokenize_waveform(self, audio, kimia_whisper_clip_silence=False):
         audio_embedding = self.forward(audio, kimia_whisper_clip_silence)
         return audio_embedding.cpu()
+
+if __name__ == '__main__':
+    audio = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/wavs/wavs_batch1/17582032991901418352967560978432.wav'
+    audio_waveform = load_audio(audio)
+    model = WhisperEncoder(model_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.3/model_infer_ad4/whisper-large-v3', unfreeze_online_whisper_model=False)
+    device = 'cuda:0'
+    model = model.to(device)
+    model = model.bfloat16()
+    model.eval()
+
+    audio_embedding1 = model.tokenize_waveform(audio_waveform, kimia_whisper_clip_silence=False)
+
+    audio2 = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/train/output_normalized.wav'
+    audio_waveform2 = load_audio(audio2)
+    audio_embedding2 = model.tokenize_waveform(audio_waveform2, kimia_whisper_clip_silence=False)
+
+    print(audio_embedding1)
+    print(audio_embedding2)

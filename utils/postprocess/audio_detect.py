@@ -8,6 +8,8 @@ def extract_predicted_labels(item:str):
     data = json.loads(item)
     label = data.get("label", None)
     predict = data.get("predict", None)
+    label = label.split('，')[-1]
+    predict = predict.split('，')[-1]
     return int(label), int(predict)
     pass
 
@@ -36,5 +38,5 @@ def main(
     analyze_audio_detection_results(y_true, y_pred, labels)
 
 if __name__ == "__main__":
-    infer_result_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.5/model_infer_2/infer_res/infer_prompt_data_test.jsonl'
+    infer_result_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.3/model_infer_ad4/infer_res/infer_batch2_test.jsonl'
     main(infer_result_file)

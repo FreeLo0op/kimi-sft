@@ -1,0 +1,126 @@
+[
+  {
+    "line": 1754,
+    "audio": [
+      "/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/wavs/wav_snt/16996241082671172654032755380224.wav"
+    ],
+    "label_phns": [
+      "DH EY1",
+      "K AE1 N",
+      "S IY1",
+      "AH0",
+      "JH EH1 L IY0 F IH2 SH"
+    ],
+    "predict_phns": [
+      "DH EY1",
+      "K AE1 N",
+      "S IY1",
+      "AH0",
+      "JH EH1 L IY0 F IH SH"
+    ]
+  },
+  {
+    "line": 1833,
+    "audio": [
+      "/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/wavs/wav_snt/16995720085351172435510641053696.wav"
+    ],
+    "label_phns": [
+      "L UH1 K",
+      "AE1 T",
+      "DH AH1",
+      "K AW1"
+    ],
+    "predict_phns": [
+      "L UH1 K",
+      "AE1 T",
+      "DH AH1",
+      "KAW"
+    ]
+  },
+  {
+    "line": 1953,
+    "audio": [
+      "/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/wavs/wav_snt/16995899005421172510555156533248.wav"
+    ],
+    "label_phns": [
+      "HH AE1 Z",
+      "SH IY1",
+      "G AA1 T",
+      "AH0",
+      "P IY1 S",
+      "AH1 V",
+      "P EY1 P ER0"
+    ],
+    "predict_phns": [
+      "HH AE1 Z",
+      "SH IY1",
+      "G AA1 T",
+      "AH0",
+      "P IY1 S",
+      "AH1 V",
+      "P EY1 DS"
+    ]
+  },
+  {
+    "line": 2175,
+    "audio": [
+      "/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/wavs/wav_snt/16991205268401170541859160739840.wav"
+    ],
+    "label_phns": [
+      "IH1 T",
+      "HH AE1 Z",
+      "G AA1 T",
+      "AH0",
+      "T EY1 L"
+    ],
+    "predict_phns": [
+      "IH1 T",
+      "HH AE1 Z",
+      "GAA1 T",
+      "AH0",
+      "T EY1 L"
+    ]
+  },
+  {
+    "line": 2343,
+    "audio": [
+      "/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/wavs/wav_snt/16993507036281171507290583355392.wav"
+    ],
+    "label_phns": [
+      "AY1",
+      "AE1 M",
+      "F R AH1 M",
+      "CH AY1 N AH0",
+      "AE0 N D",
+      "AY1",
+      "S P IY1 K",
+      "CH AY0 N IY1 Z"
+    ],
+    "predict_phns": [
+      "AY1",
+      "F R AH1 M",
+      "CH AY1 N AH0",
+      "AE0 N D",
+      "AY1",
+      "S P IY1 K",
+      "CH AY0 N IY1 Z",
+      "AE0 N D"
+    ]
+  },
+  {
+    "line": 2402,
+    "audio": [
+      "/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/wavs/wav_snt/16993554068901171527017495003136.wav"
+    ],
+    "label_phns": [
+      "N OW1",
+      "AY1",
+      "HH AE1 V AH0 N"
+    ],
+    "predict_phns": [
+      "N OW1",
+      "AY1 HH1 V AH0 N",
+      "HH AE1 V AH0 N"
+    ]
+  }
+]

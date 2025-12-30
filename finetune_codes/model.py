@@ -49,9 +49,12 @@ class KimiAudioModel(MoonshotKimiaForCausalLM):
     def export_model(input_dir, output_dir):
         print("Loading model from {}".format(input_dir))
         kimiaudio = KimiAudioModel.from_pretrained(input_dir)
+        print(kimiaudio.config)
 
         print("Saving Kimi-Audio LM to {}".format(output_dir))
+        
         audio_model = MoonshotKimiaForCausalLM(kimiaudio.config)
+
         audio_model_state_dict = {k: v for k, v in kimiaudio.state_dict().items() if not k.startswith("whisper_model")}
         audio_model.load_state_dict(audio_model_state_dict)
 

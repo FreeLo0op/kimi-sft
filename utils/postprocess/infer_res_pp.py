@@ -163,7 +163,7 @@ def get_phoneme_pa_res(infer_infos, dataset_name ,logger):
     total_num, infer_ress = infer_infos
     pred_failed_num, diff_num = 0, 0
     phoneme_label_pred, phoneme_label_true = list(), list()
-
+    total_cmu, pred_right_cmu = 1, 0
     for line in infer_ress:
         line = json.loads(line)
         predict, label = line['predict'], line['label']
@@ -174,6 +174,9 @@ def get_phoneme_pa_res(infer_infos, dataset_name ,logger):
             label = json.loads(label)
             pred_scores = [item['score'] for item in predict]
             label_scores = [item['score'] for item in label]
+
+            pred_cmu = [item['phoneme'] for item in predict]
+            label_cmu = [item['phoneme'] for item in label]
             if len(pred_scores) != len(label_scores):
                 diff_num += 1
                 continue
@@ -195,6 +198,10 @@ def get_phoneme_pa_res(infer_infos, dataset_name ,logger):
                 label_item = label_item.split()
                 utt_pred_scores.extend(pred_item)
                 utt_label_scores.extend(label_item)
+            for pred_cmu, label_cmu in zip(pred_cmu, label_cmu):
+                total_cmu += 1
+                if pred_cmu == label_cmu:
+                    pred_right_cmu += 1
 
             if len(utt_label_scores) != len(utt_pred_scores):
                 diff_num += 1
@@ -208,6 +215,7 @@ def get_phoneme_pa_res(infer_infos, dataset_name ,logger):
     
     # 使用logger记录结果
     logger.log_prediction_stats(pred_failed_num, total_num, diff_num)
+    logger.info(f"音素预测正确数量: {pred_right_cmu} / {total_cmu} ({pred_right_cmu/total_cmu:.2%})")
     pcc_compute(phoneme_label_true, phoneme_label_pred, logger=logger)
 
 def get_word_pa_res(infer_infos, pa_type:str, dataset_name:str, logger):
@@ -557,7 +565,7 @@ def get_asr_res(infer_infos, logger):
             pred_labels.append(predict_res)
             true_labels.append(label_ref)
         except Exception as e:
-            # logger.error(f"Error parsing predict line: {key} : {e}")
+            logger.error(f"Error parsing predict line: {key} : {e}")
             pred_failed_num += 1
             continue  
     total_wer = 0
@@ -808,18 +816,25 @@ def get_full_pa_res(infer_infos, dataset_name: str, logger):
             key, ext = os.path.splitext(os.path.basename(line['audio']))
 
             # 提取音素评测结果
-            phn_pre = re.findall(r'音素评测结果：(\[[^\[\]]*\])。', predict)[0]
-            phn_pre = json.loads(phn_pre)
+            phn_pre = re.findall(r'音素评测：(.*)。单词评测', predict)[0]
+            phn_pre = phn_pre.split('|')
             phn_pre_scores = []
             for item in phn_pre:
-                tmp_scores = [float(i) for i in item['score'].split()]
+                tmp_scores = re.findall(r'\]\((.*)\)', item)[0]
+                tmp_scores = tmp_scores.split()
+                tmp_scores = [float(i) for i in tmp_scores]
                 phn_pre_scores.extend(tmp_scores)
             
-            phn_true = re.findall(r'音素评测结果：(\[[^\[\]]*\])。', label)[0]
-            phn_true = json.loads(phn_true)
+            phn_true = re.findall(r'音素评测：(.*)。单词评测', label)[0]
+            phn_true = phn_true.split('|')
             phn_true_scores = []
             for item in phn_true:
-                tmp_scores = [float(i) for i in item['score'].split()]
+                tmp_scores = re.findall(r'\]\((.*)\)', item)[0]
+                tmp_scores = tmp_scores.split()
+                tmp_scores = [float(i) for i in tmp_scores]
+                for iii in tmp_scores:
+                    if iii not in [0.0, 1.0]:
+                        print(iii)
                 phn_true_scores.extend(tmp_scores)
             if len(phn_pre_scores) != len(phn_true_scores):
                 logger.warning(f"{key} 音素评测结果数量不一致: {len(phn_pre_scores)} vs {len(phn_true_scores)}")
@@ -832,14 +847,18 @@ def get_full_pa_res(infer_infos, dataset_name: str, logger):
             all_phn_true_scores.extend(phn_true_scores)
 
             # 提取单词评测结果
-            word_pre = re.findall(r'单词评测结果：(\[.*?\])。', predict)[0]
-            word_true = re.findall(r'单词评测结果：(\[.*?\])。', label)[0]
-            # word_pre = json.loads(word_pre)
-            # word_true = json.loads(word_true)
-            # word_pre_scores = [item['score'] for item in word_pre]
-            # word_true_scores = [item['score'] for item in word_true]
-            word_pre_scores = ast.literal_eval(word_pre)
-            word_true_scores = ast.literal_eval(word_true)
+            true_score_dict = {}
+            with open('/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_word_accuracy_modify', 'r') as f:
+                for line in f:
+                    line = line.strip().split('\t', maxsplit=2)
+                    k = line[0]
+                    scores = line[2].split(' ')
+                    true_score_dict[k] = [float(i) for i in scores]
+            word_pre = re.findall(r'单词评测：(.*)。句子准确度评测', predict)[0]
+            word_true = re.findall(r'单词评测：(.*)。句子准确度评测', label)[0]
+            word_pre_scores = [float(i) for i in word_pre.split()]
+            word_true_scores = [float(i) for i in word_true.split()]
+            word_true_scores = true_score_dict.get(key)
             if not word_pre_scores:
                 # logger.warning(f"{key} 单词评测结果为空，全部设置为0")
                 word_pre_scores = [0] * len(word_true_scores)
@@ -851,37 +870,53 @@ def get_full_pa_res(infer_infos, dataset_name: str, logger):
             for i in range(len(word_pre_scores)):
                 word_pre_scores[i] = score_check('tal-k12', 'word', 'accuracy', word_pre_scores[i], logger, key)
                 word_true_scores[i] = score_check('tal-k12', 'word', 'accuracy', word_true_scores[i], logger, key)
-            # all_word_prd_scores.extend(word_pre_scores)
-            # all_word_true_scores.extend(word_true_scores)
+            all_word_prd_scores.extend(word_pre_scores)
+            all_word_true_scores.extend(word_true_scores)
 
             # 提取句子评测结果
             ## 句子发音准确性
-            snt_acc_pre = re.findall(r'句子准确度评测结果：([\d\.]+)，', predict)[0]
-            snt_acc_true = re.findall(r'句子准确度评测结果：([\d\.]+)，', label)[0]
+            acc_dict = {}
+            with open('/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_sent_score', 'r') as f:
+                for line in f:
+                    line = line.strip().split('\t', maxsplit=2)
+                    k = line[0]
+                    score = float(line[2])
+                    acc_dict[k] = score
+            snt_acc_pre = re.findall(r'句子准确度评测：([\d\.]+)，', predict)[0]
+            snt_acc_true = re.findall(r'句子准确度评测：([\d\.]+)，', label)[0]
+            snt_acc_true = acc_dict.get(key)
             snt_acc_pre = score_check('tal-k12', 'sentence', 'accuracy', snt_acc_pre, logger, key)
             snt_acc_true = score_check('tal-k12', 'sentence', 'accuracy', snt_acc_true, logger, key)
             all_snt_acc_prd_scores.append(snt_acc_pre)
             all_snt_acc_true_scores.append(snt_acc_true)
             ## 句子流畅度
-            snt_flu_pre = re.findall(r'句子流利度评测结果：([\d\.]+)。', predict)[0]
-            snt_flu_true = re.findall(r'句子流利度评测结果：([\d\.]+)。', label)[0]
+            flu_dict = {}
+            with open('/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/next_fluency/test/label_sent_score', 'r') as f:
+                for line in f:
+                    line = line.strip().split('\t')
+                    k = line[0]
+                    score = float(line[4])
+                    flu_dict[k] = score
+            snt_flu_pre = re.findall(r'句子流利度评测：([\d\.]+)。', predict)[0]
+            snt_flu_true = re.findall(r'句子流利度评测：([\d\.]+)。', label)[0]
+            snt_flu_true = flu_dict.get(key)
             snt_flu_pre = score_check('tal-k12', 'sentence', 'fluency', snt_flu_pre, logger, key)
             snt_flu_true = score_check('tal-k12', 'sentence', 'fluency', snt_flu_true, logger, key)
             all_snt_flu_prd_scores.append(snt_flu_pre)
             all_snt_flu_true_scores.append(snt_flu_true)
 
             # 临时修正真实标签，测试
-            if snt_acc_pre == 0 and snt_flu_pre == 0:
-                logger.warning(f"{key} 句子评测结果为0，将单词全部设置为0")
-                logger.info(f"{word_pre_scores}")
-                logger.info(f"{word_true_scores}")
-                logger.info(f"{line['audio'][0]}")
-                word_true_scores = [0] * len(word_pre_scores)
-            all_word_prd_scores.extend(word_pre_scores)
-            all_word_true_scores.extend(word_true_scores)
+            # if snt_acc_pre == 0 and snt_flu_pre == 0:
+            #     # logger.warning(f"{key} 句子评测结果为0，将单词全部设置为0")
+            #     # logger.info(f"{word_pre_scores}")
+            #     # logger.info(f"{word_true_scores}")
+            #     # logger.info(f"{line['audio'][0]}")
+            #     word_true_scores = [0] * len(word_pre_scores)
+            # all_word_prd_scores.extend(word_pre_scores)
+            # all_word_true_scores.extend(word_true_scores)
 
         except Exception as e:
-            logger.error(f"{key} 句子评测结果处理失败: {e}")
+            # logger.error(f"{key} 句子评测结果处理失败: {e}")
             pred_failed_num += 1
             continue
     logger.info(f"预测分数数量: {len(all_word_prd_scores)}")
@@ -989,23 +1024,25 @@ def get_xxj_res(infer_infos, dataset_name: str, logger):
         prompt = line['prompt']
         key, _ = os.path.splitext(os.path.basename(line['audio']))
         try:
-            txt_pred = re.findall(r'学生作答结果为[:]?(.*)；', predict)[0]
-            txt_label = re.findall(r'学生作答结果为:(.*)；', label)[0]
-            current_wer = wer(txt_label, txt_pred)
-            total_wer += current_wer
+            asr_pred, judge_pred = predict.split('|')
+            asr_label, judge_label = label.split('|')
+            asr_pred, asr_label = asr_pred.replace('作答结果:','').strip(), asr_label.replace('作答结果:','').strip()
 
-            predict = re.findall(r'学生作答结果:(.*)。', predict)[0]
-            ref_answer = re.findall(r'参考答案：(.*)\n', prompt)[0]
-            question = re.findall(r'题目描述：(.*)\n', prompt)[0]
-            label = re.findall(r'学生作答结果:(.*)。', label)[0]
-            # if txt_pred.strip() in prompt and predict == '回答错误':
-            #     logger.info(f"{key} 预测答案在题目中出现，实际标签为回答错误，修正为回答正确")
-            #     predict = '回答正确'
+            current_wer = wer(asr_label, asr_pred)
+            total_wer += current_wer
+            if '错误' in judge_pred:
+                predict = '回答错误'
+            else:
+                predict = '回答正确'
+            if '错误' in judge_label:
+                label = '回答错误'
+            else:
+                label = '回答正确'
         except Exception as e:
-            logger.error(f"计算WER时出错: {key}, {e}")
+            # logger.error(f"计算WER时出错: {key}, {e}")
             continue
 
-        # print(f"{key}\t{question}\t{ref_answer}\t{txt_pred}\t{txt_label}\t{predict}\t{label}")
+        print(f'{key}\t{predict}')
         if label == '回答正确':
             all_label.append(1)
         else:
@@ -1016,8 +1053,8 @@ def get_xxj_res(infer_infos, dataset_name: str, logger):
         else:
             all_predict.append(0)
         
-        if label != predict:
-            logger.info(f"{key}")
+        # if label != predict:
+        #     logger.info(f"{key}")
         
     avg_wer = total_wer / total_num if total_num > 0 else 0
     logger.info(f"平均WER: {avg_wer}")
@@ -1026,3 +1063,50 @@ def get_xxj_res(infer_infos, dataset_name: str, logger):
 
     print(f"混淆矩阵: \n{cm}")
     print(f"分类报告: \n{cr}")
+
+def get_ipa_res(infer_infos, logger):
+    total_num, infer_ress = infer_infos
+    pred_failed_num = 0
+    total_ipas, correct_ipas = 0, 0
+    true_labels, pred_labels = [], []
+
+    for line in infer_ress:
+        line = json.loads(line)
+        predict, label = line['predict'], line['label']
+        audio = line['audio']
+        predict = predict.split('|')
+        label = label.split('|')
+        if len(predict) != len(label):
+            pred_failed_num += 1
+            logger.info(f'predict: {predict}')
+            logger.info(f'label: {label}')
+            logger.info(f'audio: {audio}\n')
+            logger.info('-'*50)
+            continue
+        for p, l in zip(predict, label):
+            total_ipas += 1
+            p_ipa = re.findall(r'\[(.*)\]', p)[0]
+            l_ipa = re.findall(r'\[(.*)\]', l)[0]
+            
+            p_score = re.findall(r'\((.*)\)', p)[0].split()
+            l_score = re.findall(r'\((.*)\)', l)[0].split()
+            p_score = [float(x) for x in p_score]
+            for i in range(len(p_score)):
+                p_score[i] = score_check('tal-k12', 'phoneme', 'accuracy', p_score[i], logger, 'none')
+            l_score = [float(x) for x in l_score]
+            if len(p_score) != len(l_score):
+                logger.info('打分数量不一致')
+                logger.info(f'audio: {audio}')
+                logger.info(f'predict: {predict}')
+                logger.info(f'label: {label}\n')
+                pred_failed_num += 1
+            else:
+                true_labels.extend(l_score)
+                pred_labels.extend(p_score)
+            if p_ipa == l_ipa:
+                correct_ipas += 1
+    
+    logger.info(f"预测失败数量: {pred_failed_num}/{total_num}")
+    accuracy = correct_ipas / total_ipas if total_ipas > 0 else 0
+    logger.info(f"IPA准确率: {accuracy:.4f} ({correct_ipas}/{total_ipas})")
+    pcc_compute(true_labels, pred_labels, 'ipa_score', logger=logger)

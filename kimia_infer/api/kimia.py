@@ -11,18 +11,14 @@ from kimia_infer.utils.sampler import KimiASampler
 from huggingface_hub import snapshot_download
 
 class KimiAudio(object):
-    def __init__(self, model_path: str, device: str, load_detokenizer: bool = True):
+    def __init__(self, model_path: str, device: str, load_detokenizer: bool = False, audio_detect: bool = False):
         logger.info(f"Loading kimi-audio main model")
         self.device = device
         if os.path.exists(model_path):
-            # local path
             cache_path = model_path
         else:
-            # cache everything if model_path is a model-id
             cache_path = snapshot_download(model_path)
     
-        logger.info(f"Looking for resources in {cache_path}")
-        logger.info(f"Loading whisper model")
         self.alm = AutoModelForCausalLM.from_pretrained(
             cache_path, torch_dtype=torch.bfloat16, trust_remote_code=True
         )
@@ -51,6 +47,7 @@ class KimiAudio(object):
 
         self.extra_tokens = self.prompt_manager.extra_tokens
         self.eod_ids = [self.extra_tokens.msg_end, self.extra_tokens.media_end]
+        self.audio_detect = audio_detect
 
     @torch.inference_mode()
     def _generate_loop(
@@ -93,6 +90,11 @@ class KimiAudio(object):
             dtype=torch.int,
             device=self.device,
         )
+        text_previous_tokens_prob = torch.zeros(
+            (4096,),
+            dtype=torch.float,
+            device=self.device,
+        )
 
         decoder_input_audio_ids = audio_input_ids.clone()
         decoder_input_text_ids = text_input_ids.clone()
@@ -112,13 +114,8 @@ class KimiAudio(object):
         valid_text_length = 0
         valid_audio_length = 0
 
-        # for i in tqdm.tqdm(
-        #     range(max_new_tokens), desc="Generating tokens", disable=False
-        # ):
         for i in range(max_new_tokens):
-            # audio_logits, text_logits, past_key_values 
-            
-            res = self.alm.forward(
+            audio_logits, text_logits, audio_detect_logits, past_key_values = self.alm.forward(
                 input_ids=decoder_input_audio_ids,
                 text_input_ids=decoder_input_text_ids,
                 whisper_input_feature=decoder_input_whisper_feature,
@@ -127,14 +124,15 @@ class KimiAudio(object):
                 past_key_values=past_key_values,
                 return_dict=False,
             )
-            audio_logits, text_logits, extra_logits, past_key_values = res
             # Sample text token using the sampler
-            next_token_text = sampler.sample_text_logits(
-                text_logits, recent_tokens=text_previous_tokens[:i] if i > 0 else None
-            )
-            # next_token_text = sampler.sample_text_logits(
-            #     extra_logits, recent_tokens=text_previous_tokens[:i] if i > 0 else None
-            # )
+            if self.audio_detect:
+                next_token_text, max_prob_text = sampler.sample_text_logits(
+                    audio_detect_logits, recent_tokens=text_previous_tokens[:i] if i > 0 else None
+                )
+            else:
+                next_token_text, max_prob_text = sampler.sample_text_logits(
+                    text_logits, recent_tokens=text_previous_tokens[:i] if i > 0 else None
+                )
 
             # Sample audio token using the sampler
             next_audio_token = sampler.sample_audio_logits(
@@ -143,12 +141,14 @@ class KimiAudio(object):
 
             if text_stream_is_finished:
                 next_token_text.fill_(self.extra_tokens.kimia_text_blank)
+                max_prob_text.fill_(1.0)
             elif next_token_text.item() == self.extra_tokens.kimia_text_eos:
                 text_stream_is_finished = True
             else:
                 valid_text_length += 1
 
             text_previous_tokens[i : i + 1] = next_token_text
+            text_previous_tokens_prob[i : i + 1] = max_prob_text
 
             if i < self.kimia_text_audiodelaytokens:
                 next_audio_token.fill_(self.extra_tokens.kimia_text_blank)
@@ -175,6 +175,13 @@ class KimiAudio(object):
                     .numpy()
                     .tolist()
                 )
+                return_text_tokens_probs = (
+                    text_previous_tokens_prob[:valid_text_length]
+                    .detach()
+                    .cpu()
+                    .numpy()
+                    .tolist()
+                )
                 return_audio_tokens = (
                     previous_audio_tokens[
                         self.kimia_text_audiodelaytokens : valid_audio_length
@@ -185,7 +192,7 @@ class KimiAudio(object):
                     .numpy()
                     .tolist()
                 )
-                return return_audio_tokens, return_text_tokens
+                return return_audio_tokens, return_text_tokens, return_text_tokens_probs
             else:
                 decoder_input_audio_ids = next_audio_token.unsqueeze(1)
                 decoder_input_text_ids = next_token_text.unsqueeze(1)
@@ -204,6 +211,9 @@ class KimiAudio(object):
         return_text_tokens = (
             text_previous_tokens[:valid_text_length].detach().cpu().numpy().tolist()
         )
+        return_text_tokens_probs = (
+            text_previous_tokens_prob[:valid_text_length].detach().cpu().numpy().tolist()
+        )
         return_audio_tokens = (
             previous_audio_tokens[
                 self.kimia_text_audiodelaytokens : valid_audio_length
@@ -214,7 +224,8 @@ class KimiAudio(object):
             .numpy()
             .tolist()
         )
-        return return_audio_tokens, return_text_tokens
+        
+        return return_audio_tokens, return_text_tokens, return_text_tokens_probs
 
     @torch.inference_mode()
     def generate(
@@ -229,7 +240,7 @@ class KimiAudio(object):
         audio_repetition_window_size=64,
         text_repetition_penalty=1.0,
         text_repetition_window_size=16,
-        max_new_tokens=-1,
+        max_new_tokens=2048,
     ):
         ## TODO: 需要一个check函数，检查输入的history格式是否合法
         ## 比如，对于ASR任务，一定是: text-instruction/audio-instruction + audio-content, 我理解content和instruction是不能换位置的
@@ -238,12 +249,13 @@ class KimiAudio(object):
         assert output_type in ["text", "both"]
 
         history = self.prompt_manager.get_prompt(chats, output_type=output_type)
-
+        
         audio_input_ids, text_input_ids, is_continuous_mask, _, _ = history.to_tensor()
         audio_features = history.continuous_feature
 
         generated_wav_tokens = []
         generated_text_tokens = []
+        generated_text_tokens_probs = []
 
         if output_type == "both":
             max_new_tokens = int(12.5 * 120) - audio_input_ids.shape[1]
@@ -256,7 +268,7 @@ class KimiAudio(object):
         is_continuous_mask = is_continuous_mask.to(self.device)
         audio_features = [f.to(self.device) for f in audio_features]
 
-        generated_wav_tokens, generated_text_tokens = self._generate_loop(
+        generated_wav_tokens, generated_text_tokens, generated_text_tokens_probs = self._generate_loop(
             audio_input_ids=audio_input_ids,
             text_input_ids=text_input_ids,
             max_new_tokens=max_new_tokens,
@@ -272,6 +284,8 @@ class KimiAudio(object):
             continous_feature=audio_features,
             output_type=output_type,
         )
+        # print(generated_text_tokens, len(generated_text_tokens))
+        # print(generated_text_tokens_probs, len(generated_text_tokens_probs))
 
         generated_wav_tokens = [
             t for t in generated_wav_tokens if t >= self.kimia_token_offset
@@ -288,7 +302,7 @@ class KimiAudio(object):
         else:
             generated_wav = None
 
-        return generated_wav, generated_text
+        return generated_wav, generated_text, generated_text_tokens_probs
 
     def detokenize_audio(self, audio_tokens):
         if self.detokenizer is None:
@@ -327,5 +341,9 @@ class KimiAudio(object):
         for x in text_tokens:
             if x == self.extra_tokens.kimia_text_eos:
                 break
-            valid_text_ids.append(x)
-        return self.prompt_manager.text_tokenizer.decode(valid_text_ids)
+            valid_text_ids.append([x])
+        text = []
+        for token_id in valid_text_ids:
+            text.append(self.prompt_manager.text_tokenizer.decode(token_id))
+        return text
+        # return self.prompt_manager.text_tokenizer.decode(valid_text_ids)

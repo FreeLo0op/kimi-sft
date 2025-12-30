@@ -6,25 +6,24 @@ set -euo pipefail
 convert=$1  # "true" or "false"
 if [ "$convert" == "true" ]; then
     echo "Converting model for inference..."
-
     model_name=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B
-    input_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.5/pt_model_2
-    output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.5/model_infer_2
 
-    cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft-2/kimi-sft
+    input_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.7/pt_model
+    output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.7/model_infer
+
+    cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
     python -m finetune_codes.model --model_name $model_name \
         --action "export_model" \
         --input_dir $input_dir \
         --output_dir $output_dir
     echo "Model conversion completed."
 fi
-cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft-2/kimi-sft
+cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
+root_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft_long/test'
+testDataset_list=/mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft/utils/configs/testDataset.list
 
-testDataset_list=/mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft-2/kimi-sft/utils/configs/testDataset.list
-root_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/sft/test'
-model_path=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.5/model_infer_2
-output_dir=${model_path}/infer_res
-
+model_path=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.3/model_infer_2
+output_dir=${model_path}/infer_res_mp3
 
 if [[ ! -f "$testDataset_list" ]]; then
 	echo "test dataset list not found: $testDataset_list" >&2

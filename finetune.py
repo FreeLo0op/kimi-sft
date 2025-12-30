@@ -21,6 +21,7 @@ from huggingface_hub import snapshot_download
 
 from finetune_codes.model import KimiAudioModel
 from finetune_codes.datasets import LazySupervisedDataset
+from finetune_codes.configuration_moonshot_kimia import KimiAudioConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -60,6 +61,9 @@ class TrainingArguments(transformers.TrainingArguments):
             "help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."
         },
     )
+    audio_detect_layers_train: bool = field(default=False)
+    load_audio_detect_layers: bool = field(default=False)
+    audio_detect_layers_num: int = field(default=2)
 
 def maybe_zero_3(param):
     if hasattr(param, "ds_id"):
@@ -95,7 +99,7 @@ def make_supervised_data_module(
 
     with open(data_args.train_data_path, "r") as f:
         lines = f.readlines()
-        all_data = [json.loads(line) for line in lines] * 3  # 3倍数据增强
+        all_data = [json.loads(line) for line in lines] # * 3  # 3倍数据增强
 
     # Process evaluation data
     eval_data = None
@@ -126,7 +130,6 @@ def make_supervised_data_module(
         train_data = all_data
 
     random.shuffle(train_data)
-
     train_dataset = dataset_cls(train_data, whisper_model=whisper_model, text_tokenizer=text_tokenizer, max_len=max_len, kimia_token_offset=kimia_token_offset)
 
     if isinstance(eval_data, dict):
@@ -141,28 +144,24 @@ def make_supervised_data_module(
 
     return dict(train_dataset=train_dataset, eval_dataset=eval_dataset)
 
-def compute_loss(outputs, labels, num_items_in_batch=None):
+def compute_loss_llm(outputs, labels, num_items_in_batch=None):
     # remove audio loss
-
-    audio_logits, text_logits, extra_logits = outputs.logits
+    text_logits, audio_logits, audio_detect_logits = outputs.logits
     # text_logits = outputs.logits[0]
-
     audio_labels, text_labels, audio_loss_mask, text_loss_mask = labels
     # text_labels, text_loss_mask = labels
-
     # audio_loss = torch.nn.functional.cross_entropy(audio_logits.view(-1, audio_logits.shape[-1]), audio_labels.view(-1), reduction="none")
-    text_loss = torch.nn.functional.cross_entropy(text_logits.view(-1, text_logits.shape[-1]), text_labels.view(-1), reduction="none")
-    extra_loss = torch.nn.functional.cross_entropy(extra_logits.view(-1, extra_logits.shape[-1]), text_labels.view(-1), reduction="none")
-
     # audio_loss = (audio_loss * audio_loss_mask.view(-1)).sum() / (audio_loss_mask.view(-1).sum() + 1e-4)
+    text_loss = torch.nn.functional.cross_entropy(text_logits.view(-1, text_logits.shape[-1]), text_labels.view(-1), reduction="none")
     text_loss = (text_loss * text_loss_mask.view(-1)).sum() / (text_loss_mask.view(-1).sum() + 1e-4)
-    extra_loss = (extra_loss * text_loss_mask.view(-1)).sum() / (text_loss_mask.view(-1).sum() + 1e-4)
-    # loss = audio_loss + text_loss
-    # logger.info(f"Text loss: {text_loss.item():.4f}, Extra loss: {extra_loss.item():.4f}")
-    loss = text_loss + extra_loss
+    return text_loss
 
-    return extra_loss
-    return loss
+def compute_loss_ad(outputs, labels, num_items_in_batch=None):
+    text_logits, audio_logits, audio_detect_logits = outputs.logits
+    audio_labels, text_labels, audio_loss_mask, text_loss_mask = labels
+    audio_detect_loss = torch.nn.functional.cross_entropy(audio_detect_logits.view(-1, audio_detect_logits.shape[-1]), text_labels.view(-1), reduction="none")
+    audio_detect_loss = (audio_detect_loss * text_loss_mask.view(-1)).sum() / (text_loss_mask.view(-1).sum() + 1e-4)
+    return audio_detect_loss
 
 def train():
     global local_rank
@@ -199,17 +198,25 @@ def train():
     # check if model_path exists
     if not os.path.exists(model_args.model_path):
         raise ValueError(f"Model path {model_args.model_path} does not exist")
+
+    cfg = KimiAudioConfig.from_pretrained(model_args.model_path)
+    cfg.load_audio_detect_layers = training_args.load_audio_detect_layers
+    cfg.audio_detect_layers_num = training_args.audio_detect_layers_num
+    cfg.audio_detect_layers_train = training_args.audio_detect_layers_train
+
     model = KimiAudioModel.from_pretrained(
         model_args.model_path, 
+        config=cfg,
         device_map=None,
         **model_load_kwargs
     )
     # 第一阶段结束后切换到第二阶段
-    model.activate_extra_layers(n=2, freeze_src=True, freeze_others=True)
-    model.freeze_prefix(['whisper_model', 'lm_head', 'mimo_output'])
-    model.print_trainable_summary()
-    # model.config.use_cache = False
-    
+    if cfg.audio_detect_layers_train:
+        model.activate_audio_detect_layers(n=cfg.audio_detect_layers_num)
+        model.freeze_all_except(['model.audio_detect_layers', 'model.audio_detect_norm', 'audio_detect_head', 'whisper_model'])
+        # model.freeze_prefix(['whisper_model', 'lm_head', 'mimo_output'])
+        model.print_trainable_summary()
+        # sys.exit(0)
     text_tokenizer = AutoTokenizer.from_pretrained(
         cache_path, trust_remote_code=True
     )
@@ -224,6 +231,12 @@ def train():
     )
 
     # Start trainner
+    if training_args.load_audio_detect_layers:
+        print("Using audio detect loss for training")
+        compute_loss = compute_loss_ad
+    else:
+        print("Using llm loss for training")
+        compute_loss = compute_loss_llm
     trainer = Trainer(
         model=model, args=training_args, 
         compute_loss_func=compute_loss,

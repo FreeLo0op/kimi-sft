@@ -89,9 +89,10 @@ class LazySupervisedDataset(Dataset):
             text = message["content"]
             text_tokens = self._tokenize_text(text)
 
-            if len(text_tokens) > self.max_len // 2:
-                # print('DEBUG text: {} text_tokens: {} max_len: {}'.format(text, len(text_tokens), self.max_len))
-                text_tokens = text_tokens[:self.max_len // 2]
+            audio_tokens_len = len(kimia_content_msg.audio_token_ids)
+            if len(text_tokens) + audio_tokens_len > self.max_len:
+                # print("debug: text_tokens too long, truncating", audio_tokens_len, len(text_tokens), self.max_len)
+                text_tokens = text_tokens[: self.max_len - audio_tokens_len]
 
             kimia_content_msg.text_extend(text_tokens, has_loss)
             kimia_content_msg.audio_extend(
@@ -104,9 +105,8 @@ class LazySupervisedDataset(Dataset):
 
         elif message["message_type"] == "audio":
             speech_tokens = message["audio_tokens"]
-            if len(speech_tokens) > self.max_len // 2:
-                # print('DEBUG speech_tokens: {} max_len: {}'.format(len(speech_tokens), self.max_len))
-                speech_tokens = speech_tokens[:self.max_len // 2]
+            if len(speech_tokens) > self.max_len:
+                speech_tokens = speech_tokens[:self.max_len]
 
             kimia_content_msg.audio_append(self.extra_tokens.media_begin)
             kimia_content_msg.audio_extend(speech_tokens, is_continuous=True, audio_token_loss_mask=has_loss)

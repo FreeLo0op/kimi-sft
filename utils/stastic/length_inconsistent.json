@@ -1,0 +1,12 @@
+[
+  {
+    "line": 1984,
+    "audio": [
+      "/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/wavs/wav_snt/16990695865941170328200284229632.wav"
+    ],
+    "reason": "Could not extract lengths",
+    "label_len_extracted": 4,
+    "predict_len_extracted": -1,
+    "predict_result": "用户跟读文本共4个单词，音素评测结果：[{\"word\": \"look\", \"phn\": \"L UH1 K\", \"score\": \"0 0 0\"}, {\"word\": \"at\", \"phn\": \"AE1 T\", \"score\": \"0 0\"}, {\"word\": \"the\", \"phn\": \"DH IY1\", \"score\": \"0 0\"}, {\"word\": \"duck\", \"phn\": \"D AH1 K\", \"score\": \"1 1 0\"}]。"
+  }
+]

@@ -29,6 +29,10 @@ class KimiAudioConfig(Qwen2Config):
         kimia_adaptor_input_dim: int = 5120,
         kimia_media_begin: int = 151661,
         kimia_media_end: int = 151663,
+        audio_detect_layers_train: bool = False,
+        load_audio_detect_layers: bool = False,
+        audio_detect_layers_num: int = 2,
+        load_audio_head: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -64,3 +68,7 @@ class KimiAudioConfig(Qwen2Config):
         # special tokens
         self.kimia_media_begin = kimia_media_begin
         self.kimia_media_end = kimia_media_end
+        self.audio_detect_layers_train = audio_detect_layers_train
+        self.load_audio_detect_layers = load_audio_detect_layers
+        self.audio_detect_layers_num = audio_detect_layers_num
+        self.load_audio_head = load_audio_head

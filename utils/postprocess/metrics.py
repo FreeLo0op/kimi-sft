@@ -20,7 +20,6 @@ def align_accuracy(align_label_pred, align_label_true, threshold:int=120, logger
     返回:
         float: 对齐准确率
     """
-    
     all_acc_raido = []
     for key in align_label_pred:
         if key in align_label_true:
@@ -96,6 +95,8 @@ def pcc_compute(true_list:list, pred_list:list, dataset_name:str=None, logger=No
     Compute the Pearson correlation coefficient (PCC) between two lists.
     """
     assert len(true_list) == len(pred_list), f"Length mismatch: {len(true_list)} != {len(pred_list)}"
+    if len(true_list) == 0:
+        return 0
     # logger.info(f"真实标签长度: {len(true_list)}, 预测标签长度: {len(pred_list)}")
     
     # Convert elements to float
@@ -227,7 +228,7 @@ def text_normalize(text):
         # print('原始文本:', text)
         text = text.strip()
         text = text.lower()
-        text = en_tn_model.normalize(text)
+        # text = en_tn_model.normalize(text)
         text = re.sub(r'[。，、！？：；“”‘’（）【】《》—\,\.\?\!\[\]\\\(\)\'\-]', ' ', text)
         # 中文字符前后加空格
         text = re.sub(r'([\u4e00-\u9fa5])', r' \1 ', text)

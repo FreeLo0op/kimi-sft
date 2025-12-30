@@ -72,7 +72,7 @@ CUDA_VISIBLE_DEVICES=0 python -m finetune_codes.model --model_name "moonshotai/K
 --output_dir "output/finetuned_hf_for_inference"
 
 cd /mnt/pfs_l2/jieti_team/SFT/hupeng/Kimi-Audio
-python -m finetune_codes.model --model_name "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B" --action "export_model" --input_dir "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/Base_Model/Kimi-PA-Base-v2/checkpoint-17000" --output_dir "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/Base_Model/Kimi-PA-Base-v2/Kimi_Pa_V2_ckpt17000_hf_for_inference"
+python -m finetune_codes.model --model_name "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B" --action "export_model" --input_dir "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.0/pt_model/checkpoint-2608" --output_dir "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.0/model_infer_ephch2"
 ```
 
 You can infer with the finetuned model by running:
