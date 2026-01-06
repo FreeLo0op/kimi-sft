@@ -35,6 +35,10 @@ class ModelArguments:
     model_path: str = field(
         default=None, metadata={"help": "Path to the pretrained model."}
     )
+    load_audio_head: bool = field(
+        default=False,
+        metadata={"help": "Whether to load audio head."}
+    )
 
 @dataclass
 class DataArguments:
@@ -48,7 +52,6 @@ class DataArguments:
         default=0.05, metadata={"help": "Ratio of evaluation data."}
     )
     lazy_preprocess: bool = False
-
 @dataclass
 class TrainingArguments(transformers.TrainingArguments):
     cache_dir: Optional[str] = field(default=None)
@@ -56,15 +59,12 @@ class TrainingArguments(transformers.TrainingArguments):
     dataloader_pin_memory: bool = field(default=False)
     model_max_length: int = field(
         # default=8192,
-        default=1024,
+        default=2048,
         metadata={
             "help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."
         },
     )
-    audio_detect_layers_train: bool = field(default=False)
-    load_audio_detect_layers: bool = field(default=False)
-    audio_detect_layers_num: int = field(default=2)
-
+    
 def maybe_zero_3(param):
     if hasattr(param, "ds_id"):
         assert param.ds_status == ZeroParamStatus.NOT_AVAILABLE
@@ -104,7 +104,6 @@ def make_supervised_data_module(
     # Process evaluation data
     eval_data = None
     if data_args.eval_data_path:
-        # multiple evaluation datasets
         if os.path.isdir(data_args.eval_data_path):
             eval_data = {}
             for eval_dataset_file in os.listdir(data_args.eval_data_path):
@@ -114,7 +113,6 @@ def make_supervised_data_module(
                 with open(os.path.join(data_args.eval_data_path, eval_dataset_file), "r") as f:
                     lines = f.readlines()
                     eval_data[eval_dataset_name] = [json.loads(line) for line in lines]
-        # single evaluation dataset
         elif os.path.isfile(data_args.eval_data_path):
             with open(data_args.eval_data_path, "r") as f:
                 lines = f.readlines()
@@ -144,24 +142,15 @@ def make_supervised_data_module(
 
     return dict(train_dataset=train_dataset, eval_dataset=eval_dataset)
 
-def compute_loss_llm(outputs, labels, num_items_in_batch=None):
+def compute_loss(outputs, labels, num_items_in_batch=None):
     # remove audio loss
-    text_logits, audio_logits, audio_detect_logits = outputs.logits
-    # text_logits = outputs.logits[0]
+    text_logits, audio_logits = outputs.logits
     audio_labels, text_labels, audio_loss_mask, text_loss_mask = labels
-    # text_labels, text_loss_mask = labels
     # audio_loss = torch.nn.functional.cross_entropy(audio_logits.view(-1, audio_logits.shape[-1]), audio_labels.view(-1), reduction="none")
     # audio_loss = (audio_loss * audio_loss_mask.view(-1)).sum() / (audio_loss_mask.view(-1).sum() + 1e-4)
     text_loss = torch.nn.functional.cross_entropy(text_logits.view(-1, text_logits.shape[-1]), text_labels.view(-1), reduction="none")
     text_loss = (text_loss * text_loss_mask.view(-1)).sum() / (text_loss_mask.view(-1).sum() + 1e-4)
     return text_loss
-
-def compute_loss_ad(outputs, labels, num_items_in_batch=None):
-    text_logits, audio_logits, audio_detect_logits = outputs.logits
-    audio_labels, text_labels, audio_loss_mask, text_loss_mask = labels
-    audio_detect_loss = torch.nn.functional.cross_entropy(audio_detect_logits.view(-1, audio_detect_logits.shape[-1]), text_labels.view(-1), reduction="none")
-    audio_detect_loss = (audio_detect_loss * text_loss_mask.view(-1)).sum() / (text_loss_mask.view(-1).sum() + 1e-4)
-    return audio_detect_loss
 
 def train():
     global local_rank
@@ -176,7 +165,7 @@ def train():
     ) = parser.parse_args_into_dataclasses()
 
     # This serves for single-gpu qlora.
-    if getattr(training_args, 'deepspeed', None) and int(os.environ.get("WORLD_SIZE", 1))==1:
+    if getattr(training_args, 'deepspeed', None) and int(os.environ.get("WORLD_SIZE", 1)) == 1:
         training_args.distributed_state.distributed_type = DistributedType.DEEPSPEED
 
     local_rank = training_args.local_rank
@@ -200,9 +189,6 @@ def train():
         raise ValueError(f"Model path {model_args.model_path} does not exist")
 
     cfg = KimiAudioConfig.from_pretrained(model_args.model_path)
-    cfg.load_audio_detect_layers = training_args.load_audio_detect_layers
-    cfg.audio_detect_layers_num = training_args.audio_detect_layers_num
-    cfg.audio_detect_layers_train = training_args.audio_detect_layers_train
 
     model = KimiAudioModel.from_pretrained(
         model_args.model_path, 
@@ -210,13 +196,6 @@ def train():
         device_map=None,
         **model_load_kwargs
     )
-    # 第一阶段结束后切换到第二阶段
-    if cfg.audio_detect_layers_train:
-        model.activate_audio_detect_layers(n=cfg.audio_detect_layers_num)
-        model.freeze_all_except(['model.audio_detect_layers', 'model.audio_detect_norm', 'audio_detect_head', 'whisper_model'])
-        # model.freeze_prefix(['whisper_model', 'lm_head', 'mimo_output'])
-        model.print_trainable_summary()
-        # sys.exit(0)
     text_tokenizer = AutoTokenizer.from_pretrained(
         cache_path, trust_remote_code=True
     )
@@ -231,12 +210,6 @@ def train():
     )
 
     # Start trainner
-    if training_args.load_audio_detect_layers:
-        print("Using audio detect loss for training")
-        compute_loss = compute_loss_ad
-    else:
-        print("Using llm loss for training")
-        compute_loss = compute_loss_llm
     trainer = Trainer(
         model=model, args=training_args, 
         compute_loss_func=compute_loss,
@@ -247,7 +220,7 @@ def train():
     pattern = os.path.join(training_args.output_dir, "checkpoint-*")
     checkpoints = glob.glob(pattern)
     if len(checkpoints) > 0:
-        print(f"Found {len(checkpoints)} checkpoints")
+        logger.info(f"Found {len(checkpoints)} checkpoints")
         trainer.train(resume_from_checkpoint=True)
     else:
         trainer.train()

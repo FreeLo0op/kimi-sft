@@ -1,3 +1,4 @@
+from typing import Any
 from kimia_infer.api.kimia import KimiAudio
 import os
 import sys
@@ -57,22 +58,36 @@ def prompt_loader(prompt_path:str, if_convert:bool=True) -> list:
                 infer_messages.append(single_messages)
     return infer_messages
 
+def inference(model:KimiAudio, input_text:str, input_audio:str) -> tuple[str, list]:
+    if input_audio == None:
+        messages = [
+            {"role": "user", "message_type": "text", "content": input_text},
+        ]
+    else:
+        messages = [
+            {"role": "user", "message_type": "text", "content": input_text},
+            {"role": "user", "message_type": "audio", "content": input_audio},
+        ]
+    _, text, text_probs = model.generate(messages, **sampling_params, output_type="text", max_new_tokens=512)
+    text = ''.join(text)
+    return text, text_probs
+
 def main(
         infer_prompt:str,
-        output_path:str,
         gpu_id:str,
         model_path:str="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/Kimi_Pa_V1.1_hf_for_inference",
     ):
     infer_messages = prompt_loader(infer_prompt, if_convert=False)
-    
-    model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:{gpu_id}', audio_detect=False)
-    # infer_res = []
+    model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:{gpu_id}')
+    output_path = os.path.join(model_path, 'infer_res', os.path.basename(infer_prompt))
+    if not os.path.exists(os.path.dirname(output_path)):
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
     fo = open(output_path, "w", encoding="utf-8")
+
     for i in tqdm(range(len(infer_messages)), desc="Inference", disable=False):
         messages = infer_messages[i][:-1]
         label = infer_messages[i][-1]["content"]
         audio = infer_messages[i][1]["content"]
-        # audio, label = infer_messages[i][0]["content"]
         # print(messages)
         _, text, text_probs = model.generate(messages, **sampling_params, output_type="text")
         text = ''.join(text)
@@ -87,9 +102,7 @@ def main(
         fo.write(json.dumps(infer_res, ensure_ascii=False) + "\n")
         fo.flush()
     fo.close()
-    # with open(output_path, "w", encoding="utf-8") as fo:
-    #     for line in infer_res:
-    #         fo.write(json.dumps(line, ensure_ascii=False) + "\n")
+    
 def load_text(file:str):
     text_dict = {}
     with open(file, "r", encoding="utf-8") as f:
@@ -113,28 +126,46 @@ def load_audio(file:str):
     return audio_dict
 
 def main_single_dataset():
-    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.3/model_infer_2'
+    # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.3/model_infer_2'
     # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.7/model_infer'
     # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.8/infer_model'
     # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.9/infer_model'
     # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.0/model_infer'
-    model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:0', audio_detect=False)
+    # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/model_infer_ephch3'
+    # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/infer_model_distill_epoch1_epoch3'
+    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.2/infer_model_epoch1'
+    model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:0')
 
-    infer_text_content = '你是一个KET打分考官，你需要根据考试问题和学生作答音频，对学生的回答进行发音评测。1、根据作答音频识别出文本；2、根据考试问题和识别结果，匹配出真正的作答内容；3、最后根据作答内容和音频，评测学生的句子发音准确性，评分标准为0-10分。[Pronunciation assessment for KET exam] 考题：{}'
-    infer_text_content = '你是一个英文语音评测助手，请根据音频和参考文本，评测句子整体发音准确性，并直接输出分数，评分标准为0-10分。[TASK:Sentence-level pronunciation assessment (accuracy) for non-native English-learning children(k12)] ,参考文本:{}'
-    # infer_text_content = '评测句子发音准确性，评分为a到k共11档。,{}'
+    # infer_text_content = '你是一个KET打分考官，你需要根据考试问题和学生作答音频，对学生的回答进行发音评测。1、根据作答音频识别出文本；2、根据考试问题和识别结果，匹配出真正的作答内容；3、最后根据作答内容和音频，评测学生的句子发音准确性，评分标准为0-10分。[Pronunciation assessment for KET exam] 考题：{}'
+    # infer_text_content = '你是一个英文语音评测助手，请根据音频和参考文本，评测句子整体发音准确性，并直接输出分数，评分标准为0-10分。[TASK:Sentence-level pronunciation assessment (accuracy) for non-native English-learning children(k12)] ,参考文本:{}'
+    # infer_text_content = '评测句子发音准确性，评分为a,b,c到k共11档。评测文本：{}'
+    infer_text_content = '根据音频和评测文本，评测句子整体发音准确性，评分从低到高分为a,b,c到u共21档。评测文本：{}'
     # infer_text_content = '你是一个英文语音评测助手，请根据音频和参考文本和音素，一步步完成音素、单词、句子三个层次的评测。首先，给出音素（准确度）评测结果，然后，给出单词（准确度）评测结果，最后，给出句子（准确度、流利度）评测结果。其中，音素评分标准为0-2分，单词评分标准为0-3分，句子准确度评分标准为0-10分，句子流利度评分标准为0-3分。English full pronunciation assessment：完成音素、单词、句子三个层次的评测。参考文本：{}。'
 
     # file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/huiliu_llm/data/huiliu-1229-processed_data_normalized.txt'
     # audio_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/huiliu_llm/data/wavpath_1229'
 
-    # file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_snt_score_batch2'
-    file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_snt_score_merged'
+    file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_snt_score_batch2'
+    # file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_sent_score'
+    # file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_snt_score_merged'
     audio_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/wavpath_merged'
 
     text_dict = load_text(file)
     audio_dict = load_audio(audio_file)
+    shared_key = set(text_dict.keys()) & set(audio_dict.keys())
+    text_dict = {k: text_dict[k] for k in shared_key}
+    audio_dict = {k: audio_dict[k] for k in shared_key}
     
+    # text_dict, audio_dict = {}, {}
+    # file = '/mnt/cfs/workspace/speech/fangdongyan/fdy_10.19.36.121/00-code_backup/tal_kh_evl_tools/evl_compare/noise_data/final_data.tsv'
+    # with open(file, 'r', encoding='utf-8') as f:
+    #     lines = f.readlines()
+    #     for line in lines[1:]:
+    #         line = line.strip().split("\t")
+    #         key, text, audio_path = line[0], line[4], line[5]
+    #         text_dict[key] = text
+    #         audio_dict[key] = audio_path
+
     fo_path = os.path.join(model_path, 'infer_res', os.path.basename(file))
     if not os.path.exists(os.path.dirname(fo_path)):
         os.makedirs(os.path.dirname(fo_path), exist_ok=True)
@@ -143,42 +174,37 @@ def main_single_dataset():
     total_time, total_duration, count = 0, 0, 0
     rtf_list = []
     for key in tqdm(text_dict, total=len(text_dict), desc="Inference", disable=False):
-        try:
-            ref_text = text_dict[key]
-            infer_audio_content = audio_dict.get(key, None)
-            if infer_audio_content is None:
-                continue
-            messages = [
-                {"role": "user", "message_type": "text", "content": infer_text_content.format(ref_text)},
-                {"role": "user", "message_type": "audio", "content": infer_audio_content},
-            ]
-            duration = librosa.get_duration(filename=infer_audio_content, sr=16000)
-            start_time = time.time()
-            _, text, text_probs = model.generate(messages, **sampling_params, output_type="text")
-            end_time = time.time()
-            
-            infer_time = end_time - start_time
-            total_time += infer_time
-            total_duration += duration
-            if duration > 0:
-                rtf_list.append(infer_time / duration)
-            
-            assert len(text) == len(text_probs)
-            
-            text = ''.join(text)
-            score = text.strip()
-            # fo.write(f'{key}\t{score}\t{text_probs}\n')
-            fo.write(f'{key}\t{score}\n')
-            fo.flush()
-            count += 1
-        except Exception as e:
-            print(f"Error processing {key}: {e}")
-            score = 0
-    fo.close()
-    qps = round(count / total_time, 4)
-    avg_rtf = round(total_time / total_duration, 4)
-    print(f'Successful inference samples: {count}, Total inference time: {total_time:.2f}s, Total audio duration: {total_duration:.2f}s, QPS: {qps}it/s, Avg RTF: {avg_rtf}')
+        # try:
+        ref_text = text_dict[key]
+        infer_audio_content = audio_dict.get(key, None)
+        if infer_audio_content is None:
+            continue
+        input_text = infer_text_content.format(ref_text)
+        duration = librosa.get_duration(filename=infer_audio_content, sr=16000)
+        
+        start_time = time.time()
+        text, text_probs = inference(model, input_text, infer_audio_content)
+        end_time = time.time()
+        
+        infer_time = end_time - start_time
+        total_time += infer_time
+        total_duration += duration
+        if duration > 0:
+            rtf_list.append(infer_time / duration)
 
+        score = text.strip()
+            # fo.write(f'{key}\t{score}\t{text_probs}\n')
+        # except Exception as e:
+        #     print(f"Error processing {key}: {e}")
+        #     score = 0
+        fo.write(f'{key}\t{score}\n')
+        fo.flush()
+        count += 1
+    fo.close()
+    
+    qps = round(count / total_time, 4)
+    overall_rtf = round(total_time / total_duration, 4)
+    print(f'Successful inference samples: {count}, Total inference time: {total_time:.2f}s, Total audio duration: {total_duration:.2f}s, QPS: {qps}it/s, Overall RTF: {overall_rtf}')
     if rtf_list:
         percentiles = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 99]
         results = np.percentile(rtf_list, percentiles)
@@ -191,46 +217,31 @@ def main_single_dataset():
         print("="*40 + "\n")
 
 def main_single_data():
-    
-    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.3/model_infer_2'
-    model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:0', audio_detect=False)
+    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.7/model_infer'
+    model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:0')
 
-    infer_text_content = "你是一个英文语音评测助手，请根据音频和参考文本，评测句子整体发音准确性，并直接输出分数，评分标准为0-10分。[TASK:Sentence-level pronunciation assessment (accuracy) for non-native English-learning children(k12)] ,参考文本:England England England"
-    infer_text_content = '你是一个英文语音评测助手，请根据音频和参考文本和音素，一步步完成音素、单词、句子三个层次的评测。首先，给出音素（准确度）评测结果，然后，给出单词（准确度）评测结果，最后，给出句子（准确度、流利度）评测结果。其中，音素评分标准为0-2分，单词评分标准为0-3分，句子准确度评分标准为0-10分，句子流利度评分标准为0-3分。English full pronunciation assessment：完成音素、单词、句子三个层次的评测。参考文本： [{"word": "hello", "phn": "HH AH0 L OW1"}, {"word": "i", "phn": "AY0"}, {"word": "am", "phn": "AE1 M"}, {"word": "lihua", "phn": " "}, {"word": "i", "phn": "AY0"}, {"word": "go", "phn": "G OW1"}, {"word": "to", "phn": "T AH0"}, {"word": "school", "phn": "S K UW1 L"}, {"word": "by", "phn": "B AY1"}, {"word": "bus", "phn": "B AH1 S"}, {"word": "every", "phn": "EH1 V ER0 IY0"}, {"word": "morning", "phn": "M AO1 R N IH0 NG"}, {"word": "she", "phn": "SH IY1"}, {"word": "likes", "phn": "L AY1 K S"}, {"word": "reading", "phn": "R EH1 D IH0 NG"}, {"word": "books", "phn": "B UH1 K S"}, {"word": "in", "phn": "IH0 N"}, {"word": "the", "phn": "DH AH0"}, {"word": "library", "phn": "L AY1 B R EH2 R IY0"}, {"word": "we", "phn": "W IY0"}, {"word": "have", "phn": "HH AE1 V"}, {"word": "a", "phn": "EY1"}, {"word": "big", "phn": "B IH1 G"}, {"word": "park", "phn": "P AA0 R K"}, {"word": "near", "phn": "N IH1 R"}, {"word": "our", "phn": "AA1 R"}, {"word": "house", "phn": "HH AW1 S"}]。'
+    infer_text_content = "你是一个智慧助手，检测下文是否存在语法错误，如果存在请指出错在哪里：Mike is my friend. He go to school yesterday."
 
-    infer_audio_content = '/mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft/data/punchCard-speech-clock_h5_in_xiaoe_app_u_66f3c34153bc7_CZm5w5e9VJ1766478329_1.wav'
+    infer_audio_content = None
 
-    messages = [
-        {"role": "user", "message_type": "text", "content": infer_text_content},
-        {"role": "user", "message_type": "audio", "content": infer_audio_content},
-    ]
-    _, text, text_probs = model.generate(messages, **sampling_params, output_type="text")
-    text = ''.join(text)
+    text, text_probs = inference(
+        model=model,
+        input_text=infer_text_content,
+        input_audio=infer_audio_content,
+    )
     print(text)
     
 if __name__ == "__main__":
-    # argparse = argparse.ArgumentParser()
-    # argparse.add_argument("--model_path", type=str, required=True, help="Path to the finetuned model")
-    # argparse.add_argument("--infer_prompt", type=str, required=True, help="Path to the inference prompt file")
-    # argparse.add_argument("--output_path", type=str, required=True, help="Path to save the inference results")
-    # argparse.add_argument("--gpu_id", type=str, required=True, help="GPU id to use")
-    # args = argparse.parse_args()
 
-    # model_path = args.model_path
-    # infer_prompt_file = args.infer_prompt
-    # output_path = args.output_path
-    # gpu_id = args.gpu_id
-    
     # os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
 
     # # infer_prompt_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/sft/test/tal-k12_sent_pa_accuracy_nocot-v2_test.json'
-    # # output_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/github/Kimi-Audio/output/infer_res/infer_tal-k12_sent_pa_accuracy_nocot-v2_test.json'
-
+    # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/model_infer_ephch1'
     # main(
     #     infer_prompt=infer_prompt_file,
-    #     output_path=output_path,
     #     gpu_id=gpu_id,
     #     model_path=model_path
     # )
-    main_single_dataset()
-    # main_single_data()
+
+    # main_single_dataset()
+    main_single_data()

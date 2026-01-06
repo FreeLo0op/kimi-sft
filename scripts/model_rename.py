@@ -17,11 +17,11 @@ def rename_student_to_model(index_json_path, model_dir, output_dir):
 	weight_map = index_data["weight_map"]
 
 	# 需要删除的 key 前缀
-	remove_prefixes = ["model.layers", "model.norm", "lm_head"]
+	remove_prefixes = ["model.layers", "model.norm", "lm_head", "sent_head", "sent_mlp"]
 	# 需要重命名的 student 前缀
 	student_map = {
-		"student_layers.": "model.layers.",
-		"student_norm.": "model.norm.",
+		"model.student_layers.": "model.layers.",
+		"model.student_norm.": "model.norm.",
 		"student_head.": "lm_head."
 	}
 
@@ -81,13 +81,15 @@ def rename_student_to_model(index_json_path, model_dir, output_dir):
 	out_index_path = os.path.join(output_dir, os.path.basename(index_json_path))
 	with open(out_index_path, 'w') as f:
 		json.dump(new_index, f, indent=2)
+	
+	
 
 	print(f"重命名和裁剪完成，输出目录：{output_dir}")
 
 if __name__ == "__main__":
 	# 示例用法
-    index_json_path = "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.7/pt_model_distill/checkpoint-15645/model.safetensors.index.json"
-    model_dir = "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.7/pt_model_distill/checkpoint-15645"
-    output_dir = "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.7/pt_model_distill/checkpoint-15645_renamed"
+    index_json_path = "//mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/pt_model_distill/checkpoint-7185/model.safetensors.index.json"
+    model_dir = "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/pt_model_distill/checkpoint-7185"
+    output_dir = "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/pt_model_distill/checkpoint-7185_renamed"
 
     rename_student_to_model(index_json_path, model_dir, output_dir)

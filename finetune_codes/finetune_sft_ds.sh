@@ -52,14 +52,17 @@ DISTRIBUTED_ARGS="
 echo "start finetune"
 echo "DISTRIBUTED_ARGS: $DISTRIBUTED_ARGS"
 
-# PRETRAINED_MODEL_PATH=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.7/pt_model_distill/checkpoint-15645_renamed
-PRETRAINED_MODEL_PATH=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/checkpoint-75000
+PRETRAINED_MODEL_PATH=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/pt_model_distill/checkpoint-7185_renamed
+# PRETRAINED_MODEL_PATH=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/checkpoint-75000
 # DATA_TRAIN=/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/train/audio_detect_train_semantic_codes.json
 
-DATA_TRAIN=/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/train_25_semantic_codes.json
-DATA_EVAL=/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/eval_25_semantic_codes.json
+# DATA_TRAIN=/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/train_25_semantic_codes.json
+# DATA_EVAL=/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/eval_25_semantic_codes.json
+DATA_TRAIN=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/train_25_semantic_codes.json
+DATA_EVAL=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/eval_25_semantic_codes.json
 
-output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/pt_model
+# output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.2/pt_model
+output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/pt_model_distill_epoch3_sft
 batch_size=2
 model_max_length=2048
 
@@ -78,22 +81,21 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --gradient_accumulation_steps 8 \
     --eval_strategy "steps" \
     --save_strategy "epoch" \
-    --eval_steps 200 \
-    --save_total_limit 200 \
+    --eval_steps 400 \
+    --save_total_limit 10 \
     --learning_rate 1e-5 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
     --warmup_ratio 0.2 \
     --lr_scheduler_type "cosine" \
-    --logging_steps 10 \
+    --logging_steps 50 \
     --report_to "tensorboard" \
     --model_max_length $model_max_length \
     --gradient_checkpointing True \
     --lazy_preprocess True \
-    --audio_detect_layers_train False \
-    --load_audio_detect_layers False \
-    --audio_detect_layers_num 2 \
-    --deepspeed finetune_codes/ds_config_zero3.json
+    --deepspeed finetune_codes/ds_config_zero3.json \
+    --load_audio_head False
 
 cp /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft/finetune_codes/finetune_sft_ds.sh $output_dir/finetune_sft_ds.sh.backup
 echo "Finetune process completed."
+cp $DATA_EVAL $output_dir/eval.json.backup
