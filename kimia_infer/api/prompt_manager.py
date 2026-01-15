@@ -5,7 +5,7 @@ import librosa
 import torch
 from loguru import logger
 from transformers import AutoTokenizer
-
+import time
 
 from kimia_infer.models.tokenizer.whisper_Lv3.whisper import WhisperEncoder
 from kimia_infer.models.tokenizer.glm4_tokenizer import Glm4Tokenizer
@@ -95,7 +95,6 @@ class KimiAPromptManager:
     def extract_whisper_feat(self, wav: torch.Tensor | str):
         if isinstance(wav, str):
             wav = librosa.load(wav, sr=16000)[0]
-
             wav_tensor = torch.tensor(wav).unsqueeze(0)[:, :]
         elif isinstance(wav, torch.Tensor):
             wav_tensor = wav

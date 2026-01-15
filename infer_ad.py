@@ -1,9 +1,13 @@
-from kimia_infer.api.kimia import KimiAudio
 import os
+import sys
 import json
-import soundfile as sf
-import argparse
 from tqdm import tqdm
+import time
+import librosa
+import warnings
+import pandas as pd
+from kimia_infer.api.kimia import KimiAudio
+warnings.filterwarnings("ignore")
 
 sampling_params = {
     "audio_temperature": 0.8,
@@ -16,79 +20,74 @@ sampling_params = {
     "text_repetition_window_size": 16,
 }
 
-def prompt_loader(prompt_path:str, if_convert:bool=True) -> list:
-    infer_messages = []
-    with open(prompt_path, "r", encoding="utf-8") as f:
-        if if_convert:
-            f = json.load(f)
-            for item in f:
-                single_messages = []
-                messages = item["messages"]
-                system_content = messages[0]["content"]
-                user_content = messages[1]["content"]
-                user_content = user_content.replace("<audio>", "").strip()
-                infer_content = f"{system_content}{user_content}"
+CODE_MAP = {
+        '0': '正常',  
+        '1': '噪声',
+        '2': '不相关中文',
+        '3': '不相关英文',
+        '4': '无意义语音',
+        '5': '音量小',
+        '6': '开头发音不完整',
+        '7': '空音频'
+    }
 
-                label = item["messages"][2]["content"]
-                audio = item["audios"][0]
+def inference(model:KimiAudio, input_text:str, input_audio:str) -> tuple[str, list]:
+    if input_audio == None:
+        messages = [
+            {"role": "user", "message_type": "text", "content": input_text},
+        ]
+    else:
+        messages = [
+            {"role": "user", "message_type": "text", "content": input_text},
+            {"role": "user", "message_type": "audio", "content": input_audio},
+        ]
+    _, text, text_probs = model.generate(messages, **sampling_params, output_type="text", max_new_tokens=512)
+    text = ''.join(text)
+    return text, text_probs
 
-                single_messages.append({"role": "user", "message_type": "text", "content": infer_content})
-                single_messages.append({"role": "user", "message_type": "audio", "content": audio})
-                single_messages.append({"role": "assistant_gt", "message_type": "text", "content": label})
-                infer_messages.append(single_messages)
-        else:
-            for line in f:
-                item = json.loads(line)
-                single_messages = item['conversation']
-                infer_messages.append(single_messages)
-    return infer_messages
-
-def main(
-        infer_prompt:str,
-        output_path:str,
-        gpu_id:str,
-        model_path:str="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/Kimi_Pa_V1.1_hf_for_inference",
+def main_abnormal_dataset(
+        model_path:str,
+        data_input:str,
+        infer_fo:str
     ):
-    infer_messages = prompt_loader(infer_prompt, if_convert=False)
+    # data_input = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/label_only_abnormal.csv'    
+    model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:0')
     
-    model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:{gpu_id}', audio_detect=True)
-    # infer_res = []
-    fo = open(output_path, "w", encoding="utf-8")
-    for i in tqdm(range(len(infer_messages)), desc="Inference", disable=False):
-        messages = infer_messages[i][:-1]
-        label = infer_messages[i][-1]["content"]
-        audio = infer_messages[i][1]["content"]
-        # audio, label = infer_messages[i][0]["content"]
+    infer_text_content = '检测音频类型，包含正常、噪声、不相关中文、不相关英文、无意义语音、音量小、开头发音不完整、空音频八类，分别对应0、1、2、3、4、5、6、7，根据参考文本做出判断。参考文本：{}'
 
-        _, text = model.generate(messages, **sampling_params, output_type="text")
-        # wav, text = model.generate(messages, **sampling_params, output_type="both")
+    if not os.path.exists(os.path.dirname(infer_fo)):
+        os.makedirs(os.path.dirname(infer_fo), exist_ok=True)
 
-        infer_res = {
-            "prompt": messages[0]["content"],
-            "audio": audio,
-            "label": label,
-            "predict": text,
-        }
-        fo.write(json.dumps(infer_res, ensure_ascii=False) + "\n")
+    data = pd.read_csv(data_input, sep='\t')
+    fo = open(infer_fo, "w", encoding="utf-8")
+
+    for idx, row in tqdm(data.iterrows(), total=len(data), desc="Inference", disable=False):
+        key = row['wavname']
+        ref_text = row['text']
+        infer_audio_content = row['wavpath']
+        if infer_audio_content is None:
+            print(f"Warning: Audio file for key {key} not found. Skipping.")
+            continue
+        input_text = infer_text_content.format(ref_text)
+        
+        text, text_probs = inference(model, input_text, infer_audio_content)
+        
+        audio_type = text.strip()
+        audio_type = CODE_MAP.get(audio_type, '未知类别')
+        fo.write(f'{key}\t{audio_type}\t{text_probs}\n')
         fo.flush()
     fo.close()
 
 if __name__ == "__main__":
-    argparse = argparse.ArgumentParser()
-    argparse.add_argument("--model_path", type=str, required=True, help="Path to the finetuned model")
-    argparse.add_argument("--infer_prompt", type=str, required=True, help="Path to the inference prompt file")
-    argparse.add_argument("--output_path", type=str, required=True, help="Path to save the inference results")
-    argparse.add_argument("--gpu_id", type=str, required=True, help="GPU id to use")
-    args = argparse.parse_args()
 
-    model_path = args.model_path
-    infer_prompt_file = args.infer_prompt
-    output_path = args.output_path
-    gpu_id = args.gpu_id
-    
-    main(
-        infer_prompt=infer_prompt_file,
-        output_path=output_path,
-        gpu_id=gpu_id,
-        model_path=model_path
+    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.4/infer_model'
+    data_input = ''
+    # csv文件；至少包含wavname、wavpath、text三列表头；分隔符：制表符('\t')
+    # 示例：/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/label_only_abnormal.csv
+    infer_fo = ''
+
+    main_abnormal_dataset(
+        model_path,
+        data_input,
+        infer_fo
     )

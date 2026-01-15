@@ -88,8 +88,8 @@ def rename_student_to_model(index_json_path, model_dir, output_dir):
 
 if __name__ == "__main__":
 	# 示例用法
-    index_json_path = "//mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/pt_model_distill/checkpoint-7185/model.safetensors.index.json"
-    model_dir = "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/pt_model_distill/checkpoint-7185"
-    output_dir = "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/pt_model_distill/checkpoint-7185_renamed"
+	model_dir = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/pt_model_distill_2/checkpoint-7185'
+	index_json_path = f'{model_dir}/model.safetensors.index.json'
+	output_dir = f'{model_dir}_renamed'
 
-    rename_student_to_model(index_json_path, model_dir, output_dir)
+	rename_student_to_model(index_json_path, model_dir, output_dir)

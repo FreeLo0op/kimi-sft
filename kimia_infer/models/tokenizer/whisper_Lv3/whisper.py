@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch import nn
 from subprocess import CalledProcessError, run, Popen, PIPE
 import os
+import time
 from functools import lru_cache
 from typing import Optional, Union
 from .modeling_whisper import WhisperModel
@@ -182,7 +183,6 @@ class WhisperEncoder(nn.Module):
                 audio = audio.float().cpu().numpy()
             else:
                 audio = audio.cpu().numpy()
-
         time_step = 0
         audios = []
         # slice audio into CHUNK_LENGTH-second segments using constants
@@ -197,13 +197,11 @@ class WhisperEncoder(nn.Module):
 
         # expected number of mel frames for a full chunk
         expected_frames = N_SAMPLES // HOP_LENGTH
-
         for audio_segment in audios:
             # import pdb; pdb.set_trace()
             assert audio_segment.shape[0] <= N_SAMPLES
             L = audio_segment.shape[0]
             token_len = (L - 1) // (HOP_LENGTH * 8) + 1  # use HOP_LENGTH constant for robustness
-
             pad_audio = pad_or_trim(audio_segment.flatten())
             mel = log_mel_spectrogram(pad_audio)  # torch.Size([80, expected_frames])
             assert mel.shape[1] == expected_frames
@@ -224,6 +222,7 @@ class WhisperEncoder(nn.Module):
                 ).last_hidden_state
                 # audio_embedding: [1, 3000, 1280]
                 audio_embedding = audio_embedding[:, : token_len * 4, :]
+
             final_audio_embedding.append(audio_embedding)
 
         final_audio_embedding = torch.cat(final_audio_embedding, dim=1)
@@ -232,7 +231,8 @@ class WhisperEncoder(nn.Module):
     @torch.no_grad()
     def tokenize_waveform(self, audio, kimia_whisper_clip_silence=False):
         audio_embedding = self.forward(audio, kimia_whisper_clip_silence)
-        return audio_embedding.cpu()
+        audio_embedding = audio_embedding.cpu()
+        return audio_embedding
 
 if __name__ == '__main__':
     audio = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/wavs/wavs_batch1/17582032991901418352967560978432.wav'

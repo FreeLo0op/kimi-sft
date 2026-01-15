@@ -1,5 +1,6 @@
 import os
 import tqdm
+import time
 import torch
 from loguru import logger
 from huggingface_hub import cached_assets_path
@@ -183,7 +184,6 @@ class KimiAudio(object):
         continous_feature: torch.Tensor = None,
         output_type: str = "text",
     ):
-
         sampler = KimiASampler(
             audio_top_k=audio_top_k,
             audio_temperature=audio_temperature,
@@ -356,18 +356,19 @@ class KimiAudio(object):
         ## 比如，对于ASR任务，一定是: text-instruction/audio-instruction + audio-content, 我理解content和instruction是不能换位置的
         ## assistant前必须有user等等，我觉得最好做一下check
 
-        assert output_type in ["text", "both"]
+        # assert output_type in ["text", "both"]
         history = self.prompt_manager.get_prompt(chats, output_type=output_type)
         audio_input_ids, text_input_ids, is_continuous_mask, _, _ = history.to_tensor()
         audio_features = history.continuous_feature
 
         generated_text_tokens, generated_text_tokens_probs = [], []
-        if output_type == "both":
-            generated_wav_tokens = []
-            max_new_tokens = int(12.5 * 120) - audio_input_ids.shape[1]
-        else:
-            if max_new_tokens == -1:
-                max_new_tokens = 7500 - audio_input_ids.shape[1]
+        generated_wav_tokens = []
+        # if output_type == "both":
+        #     generated_wav_tokens = []
+        #     max_new_tokens = int(12.5 * 120) - audio_input_ids.shape[1]
+        # else:
+        #     if max_new_tokens == -1:
+        #         max_new_tokens = 7500 - audio_input_ids.shape[1]
 
         audio_input_ids = audio_input_ids.to(self.device)
         text_input_ids = text_input_ids.to(self.device)
