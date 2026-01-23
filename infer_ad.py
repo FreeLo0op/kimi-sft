@@ -8,7 +8,7 @@ import warnings
 import pandas as pd
 from kimia_infer.api.kimia import KimiAudio
 warnings.filterwarnings("ignore")
-
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 sampling_params = {
     "audio_temperature": 0.8,
     "audio_top_k": 1,
@@ -58,15 +58,27 @@ def main_abnormal_dataset(
     if not os.path.exists(os.path.dirname(infer_fo)):
         os.makedirs(os.path.dirname(infer_fo), exist_ok=True)
 
-    data = pd.read_csv(data_input, sep='\t')
+    data = pd.read_csv(data_input, sep='\t', header=None, names=["wavname", "text", "audio_type", "wavpath"])
     fo = open(infer_fo, "w", encoding="utf-8")
 
     for idx, row in tqdm(data.iterrows(), total=len(data), desc="Inference", disable=False):
         key = row['wavname']
         ref_text = row['text']
         infer_audio_content = row['wavpath']
-        if infer_audio_content is None:
-            print(f"Warning: Audio file for key {key} not found. Skipping.")
+        
+        # 检查wavpath是否为空（NaN、None或非字符串类型）
+        if pd.isna(infer_audio_content) or infer_audio_content is None:
+            print(f"Warning: Audio file path is empty for key {key}. Skipping.")
+            continue
+        
+        # 确保是字符串类型
+        if not isinstance(infer_audio_content, str):
+            print(f"Warning: Audio file path is not a string for key {key}: {type(infer_audio_content)}. Skipping.")
+            continue
+        
+        # 检查音频文件是否存在
+        if not os.path.exists(infer_audio_content):
+            print(f"Warning: Audio file does not exist for key {key}: {infer_audio_content}. Skipping.")
             continue
         input_text = infer_text_content.format(ref_text)
         
@@ -74,17 +86,18 @@ def main_abnormal_dataset(
         
         audio_type = text.strip()
         audio_type = CODE_MAP.get(audio_type, '未知类别')
-        fo.write(f'{key}\t{audio_type}\t{text_probs}\n')
+        fo.write(f'{key}\t{text_probs}\t{audio_type}\n')
         fo.flush()
     fo.close()
 
 if __name__ == "__main__":
-
+    data_input = sys.argv[1]
+    infer_fo = sys.argv[2]
     model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.4/infer_model'
-    data_input = ''
-    # csv文件；至少包含wavname、wavpath、text三列表头；分隔符：制表符('\t')
-    # 示例：/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/label_only_abnormal.csv
-    infer_fo = ''
+    # data_input = ''
+    # # csv文件；至少包含wavname、wavpath、text三列表头；分隔符：制表符('\t')
+    # # 示例：/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/label_only_abnormal.csv
+    # infer_fo = ''
 
     main_abnormal_dataset(
         model_path,

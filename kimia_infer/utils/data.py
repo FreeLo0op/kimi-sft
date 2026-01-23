@@ -3,7 +3,11 @@ import torch
 
 class KimiAContent:
     def __init__(
-        self, audio_token_ids=None, text_token_ids=None, is_continuous_mask=None, audio_token_loss_mask=None, text_token_loss_mask=None
+        self, audio_token_ids=None, 
+        text_token_ids=None, 
+        is_continuous_mask=None, 
+        audio_token_loss_mask=None, 
+        text_token_loss_mask=None
     ):
         self.audio_token_ids: list[int] = audio_token_ids or []
         self.text_token_ids: list[int] = text_token_ids or []
@@ -58,7 +62,7 @@ class KimiAContent:
         self.text_token_loss_mask.extend(other.text_token_loss_mask)
         self.continuous_feature.extend(other.continuous_feature)
 
-    def to_tensor(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def to_tensor(self):
         return (
             torch.tensor([self.audio_token_ids], dtype=torch.long),
             torch.tensor([self.text_token_ids], dtype=torch.long),

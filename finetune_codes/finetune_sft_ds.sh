@@ -56,16 +56,17 @@ echo "DISTRIBUTED_ARGS: $DISTRIBUTED_ARGS"
 PRETRAINED_MODEL_PATH=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2/checkpoint-75000
 # DATA_TRAIN=/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/train/audio_detect_train_semantic_codes.json
 
-DATA_TRAIN=/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/train_29_semantic_codes.json
-DATA_EVAL=/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/eval_29_semantic_codes.json
+DATA_TRAIN=/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/train_30_0121_semantic_codes.json
+DATA_EVAL=/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/eval_30_0121_semantic_codes.json
 # DATA_TRAIN=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/train_25_semantic_codes.json
 # DATA_EVAL=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/eval_25_semantic_codes.json
 
-output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.5/pt_model
+output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.6/pt_model_b1
 # output_dir=/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.1/pt_model_distill_2_epoch3_sft
-batch_size=2
+batch_size=1
 model_max_length=2048
 
+cp $DATA_EVAL $output_dir/eval.json.backup
 cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
 torchrun $DISTRIBUTED_ARGS finetune.py \
     --model_name_or_path $MODEL \
@@ -80,8 +81,9 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --per_device_eval_batch_size $batch_size \
     --gradient_accumulation_steps 8 \
     --eval_strategy "steps" \
-    --save_strategy "epoch" \
+    --save_strategy "steps" \
     --eval_steps 400 \
+    --save_steps 1000 \
     --save_total_limit 10 \
     --learning_rate 1e-5 \
     --weight_decay 0.1 \
@@ -97,5 +99,6 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --load_audio_head False
 
 cp /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft/finetune_codes/finetune_sft_ds.sh $output_dir/finetune_sft_ds.sh.backup
-cp $DATA_EVAL $output_dir/eval.json.backup
 echo "Finetune process completed."
+
+bash /mnt/pfs_l2/jieti_team/SFT/hupeng/scripts/runing_runing.sh

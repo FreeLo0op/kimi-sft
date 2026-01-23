@@ -3,6 +3,7 @@ import os
 
 import librosa
 import torch
+import torchaudio
 from loguru import logger
 from transformers import AutoTokenizer
 import time
@@ -38,11 +39,8 @@ class KimiAPromptManager:
             self.text_tokenizer = AutoTokenizer.from_pretrained(
                 "/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B-Instruct", trust_remote_code=True
             )
-
         self.extra_tokens = instantiate_extra_tokens(self.text_tokenizer)
-
         self.kimia_text_audiodelaytokens = kimia_text_audiodelaytokens
-
         self.kimia_token_offset = kimia_token_offset
 
     def _tokenize_text(self, text):
@@ -51,8 +49,9 @@ class KimiAPromptManager:
         token_ids = self.text_tokenizer.encode(text, bos=False, eos=False)
         return token_ids
 
-    def _tokenize_audio(self, wav_path):
-        wav_tokens = self.audio_tokenizer.tokenize(audio_path=wav_path)
+    def _tokenize_audio(self, wav_tensor):
+        wav_tokens = self.audio_tokenizer.tokenize(audio_tensor=wav_tensor)
+        # wav_tokens = self.audio_tokenizer.tokenize(audio_path=wav_tensor)
         wav_tokens = wav_tokens + self.kimia_token_offset
         wav_tokens_list = wav_tokens.squeeze(0).cpu().numpy().tolist()
         return wav_tokens_list
@@ -73,7 +72,6 @@ class KimiAPromptManager:
             )
 
         batch_paths = wav_paths
-
         if hasattr(self.audio_tokenizer, 'tokenize_batch'):
             wav_tokens_batch = self.audio_tokenizer.tokenize_batch(batch_paths)
         else:
@@ -100,7 +98,7 @@ class KimiAPromptManager:
             wav_tensor = wav
         else:
             raise ValueError(f"Invalid wav type: {type(wav)}")
-        assert self.whisper_model is not None
+        # assert self.whisper_model is not None
         wav_tensor = wav_tensor.to(self.device)
         continous_feature = self.whisper_model.tokenize_waveform(wav_tensor)
         continous_feature = continous_feature.reshape(
@@ -120,9 +118,7 @@ class KimiAPromptManager:
         output_type: str = "text",
     ):
         kimia_content_msg = KimiAContent()
-
         role = message["role"]
-
         has_loss = role == "assistant"
 
         if tokenize_role:
@@ -155,7 +151,10 @@ class KimiAPromptManager:
                 speech_tokens = message["audio_tokens"]
             else:
                 audio_path = message["content"]
-                speech_tokens = self._tokenize_audio(audio_path)
+                audio_tensor, sr = torchaudio.load(audio_path)
+                if sr != 16000:
+                    audio_tensor = torchaudio.functional.resample(audio_tensor, sr, 16000)
+                speech_tokens = self._tokenize_audio(audio_tensor)
 
             kimia_content_msg.audio_append(self.extra_tokens.media_begin)
             kimia_content_msg.audio_extend(speech_tokens, is_continuous=True, audio_token_loss_mask=has_loss)
@@ -174,7 +173,7 @@ class KimiAPromptManager:
                 kimia_content_msg.text_append(self.extra_tokens.kimia_text_blank)
 
             if extract_whisper_feature:
-                whisper_feature = self.extract_whisper_feat(audio_path)
+                whisper_feature = self.extract_whisper_feat(audio_tensor)
                 kimia_content_msg.continuous_feature.append(whisper_feature)
         elif message["message_type"] == "audio-text":
             audio_path, text = message["content"]

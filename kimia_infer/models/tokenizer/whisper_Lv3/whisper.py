@@ -231,7 +231,7 @@ class WhisperEncoder(nn.Module):
     @torch.no_grad()
     def tokenize_waveform(self, audio, kimia_whisper_clip_silence=False):
         audio_embedding = self.forward(audio, kimia_whisper_clip_silence)
-        audio_embedding = audio_embedding.cpu()
+        # audio_embedding = audio_embedding.cpu()
         return audio_embedding
 
 if __name__ == '__main__':

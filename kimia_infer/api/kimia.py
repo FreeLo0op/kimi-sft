@@ -50,7 +50,7 @@ class KimiAudio(object):
     def _generate_text_only(
             self,
             audio_input_ids: torch.Tensor,
-            text_input_ids: torch.Tensor = None,
+            text_input_ids: torch.Tensor,
             max_new_tokens: int = 2048,
             audio_top_k: int = 5,
             audio_temperature: float = 0.0,
@@ -240,7 +240,6 @@ class KimiAudio(object):
                 past_key_values=past_key_values,
                 return_dict=False,
             )
-
             next_token_text, max_prob_text = sampler.sample_text_logits(
                 text_logits, recent_tokens=text_previous_tokens[:i] if i > 0 else None
             )
@@ -360,7 +359,6 @@ class KimiAudio(object):
         history = self.prompt_manager.get_prompt(chats, output_type=output_type)
         audio_input_ids, text_input_ids, is_continuous_mask, _, _ = history.to_tensor()
         audio_features = history.continuous_feature
-
         generated_text_tokens, generated_text_tokens_probs = [], []
         generated_wav_tokens = []
         # if output_type == "both":
@@ -369,12 +367,12 @@ class KimiAudio(object):
         # else:
         #     if max_new_tokens == -1:
         #         max_new_tokens = 7500 - audio_input_ids.shape[1]
-
+        
         audio_input_ids = audio_input_ids.to(self.device)
         text_input_ids = text_input_ids.to(self.device)
         is_continuous_mask = is_continuous_mask.to(self.device)
-        audio_features = [f.to(self.device) for f in audio_features]
 
+        # audio_features = [f.to(self.device) for f in audio_features]
         generated_wav_tokens, generated_text_tokens, generated_text_tokens_probs = self._generate_loop(
         # generated_wav_tokens, generated_text_tokens, generated_text_tokens_probs = self._generate_text_only(
             audio_input_ids=audio_input_ids,
@@ -392,6 +390,7 @@ class KimiAudio(object):
             continous_feature=audio_features,
             output_type=output_type,
         )
+
         if output_type == "both":
             generated_wav_tokens = [
                 t for t in generated_wav_tokens if t >= self.kimia_token_offset

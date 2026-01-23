@@ -15,8 +15,10 @@ class Glm4Tokenizer(nn.Module):
         self.whisper_model = WhisperVQEncoder.from_pretrained(tokenizer_path).eval()
         self.feature_extractor = WhisperFeatureExtractor.from_pretrained(tokenizer_path)
 
-    def tokenize(self, speech=None, audio_path=None, sr=16000):
-        if audio_path:
+    def tokenize(self, speech=None, audio_path=None, audio_tensor=None, sr=16000):
+        if audio_tensor is not None:
+            audio_info = (audio_tensor, sr)
+        elif audio_path:
             audio, loaded_sr = torchaudio.load(audio_path)
             if audio.size(0) > 1:
                 audio = audio.mean(dim=0, keepdim=True)
@@ -25,7 +27,6 @@ class Glm4Tokenizer(nn.Module):
             audio_info = (audio, sr)
         else:
             assert speech is not None
-            assert sr
             if isinstance(speech, list):
                 speech = torch.tensor(speech).unsqueeze(0)
             if len(speech.shape) == 1:

@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 MAX_WORKERS = 48
-MAX_AUDIO_DURATION = 29  # seconds
+MAX_AUDIO_DURATION = 30  # seconds
 
 # global config
 WAVPATH_MAP = {
@@ -49,7 +49,7 @@ def check_audio_valid(wavpath:str):
         if 0 < duration < MAX_AUDIO_DURATION and sample_rate == 16000:
             return True
         else:
-            logger.warning(f"Invalid audio: {wavpath}, duration: {duration}, sample_rate: {sample_rate}")
+            # logger.warning(f"Invalid audio: {wavpath}, duration: {duration}, sample_rate: {sample_rate}")
             return False
     except Exception as e:
         logger.warning(f"Error loading audio: {wavpath}, error: {e}")
@@ -207,12 +207,12 @@ def main_sft(
 
         logger.info(f"Processed {count}/{len(old_prompts)} valid prompts from {ori_prompt}, {len(old_prompts)-count} invalid prompts are removed.")
 
-    # if dataset_type == 'train':
-    #     ad_prompt = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/train/ad_train_260112_llm.jsonl'
-    #     with open(ad_prompt, 'r') as fin:
-    #         for line in fin:
-    #             line = json.loads(line.strip())
-    #             new_prompts.append(line)
+    if dataset_type == 'train':
+        ad_prompt = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/train/ad_train_260119_llm.jsonl'
+        with open(ad_prompt, 'r') as fin:
+            for line in fin:
+                line = json.loads(line.strip())
+                new_prompts.append(line)
         
     save_root = os.path.dirname(save_path)
     if not os.path.exists(save_root):
@@ -224,11 +224,11 @@ def main_sft(
 if __name__ == "__main__":
     main_sft(
         dataset_type='train',
-        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/train_29.json'
+        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/train_30_0121.json'
     )
     main_sft(
         dataset_type='eval',
-        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/eval_29.json'
+        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/eval_30_0121.json'
     )
 
     # main_base(
