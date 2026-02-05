@@ -49,7 +49,7 @@ if [ -z ${NODE_RANK+x} ]; then
 else
     # 多节点模式
     NNODES=2
-    MASTER_ADDR="10.207.24.226"  # Set the IP address (or hostname) of the master node
+    MASTER_ADDR="10.198.67.221"  # Set the IP address (or hostname) of the master node
     MASTER_PORT=6001
 fi
 
@@ -59,11 +59,11 @@ PRETRAINED_MODEL_PATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-mode
 
 # ATTENTION: specify the path to your training data, which should be a json file consisting of a list of conversations.
 # See the section for finetuning in README for more information.
-DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/base/train/train_data_semantic_codes.json"
-DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/base/dev/semantic_codes"
-output_dir="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v2"
-batch_size=4
-model_max_length=512
+DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/train_30_semantic_codes.json"
+DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/eval/eval_30_semantic_codes.json"
+output_dir="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE1_MODEL"
+batch_size=8
+model_max_length=1024
 
 echo "PRETRAINED_MODEL_PATH: $PRETRAINED_MODEL_PATH"
 echo "DATA: $DATA_TRAIN"
@@ -79,6 +79,7 @@ DISTRIBUTED_ARGS="
 echo "start finetune"
 echo "DISTRIBUTED_ARGS: $DISTRIBUTED_ARGS"
 
+cd /mnt/pfs_l2/jieti_team/SFT/hupeng/github/kimi-sft
 torchrun $DISTRIBUTED_ARGS finetune.py \
     --model_name_or_path $MODEL \
     --model_path $PRETRAINED_MODEL_PATH \
@@ -87,23 +88,24 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --eval_ratio 0.05 \
     --bf16 True \
     --output_dir $output_dir \
-    --num_train_epochs 2 \
+    --num_train_epochs 1 \
     --per_device_train_batch_size $batch_size \
     --per_device_eval_batch_size $batch_size \
     --model_max_length $model_max_length \
-    --gradient_accumulation_steps 4 \
+    --gradient_accumulation_steps 8 \
     --eval_strategy "steps" \
     --save_strategy "steps" \
-    --eval_steps 5000 \
-    --save_steps 5000 \
+    --eval_steps 3000 \
+    --save_steps 3000 \
     --save_total_limit 2000 \
     --learning_rate 1e-6 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
     --warmup_ratio 0.2 \
     --lr_scheduler_type "cosine" \
-    --logging_steps 10 \
+    --logging_steps 50 \
     --report_to "tensorboard" \
     --gradient_checkpointing True \
     --lazy_preprocess True \
-    --deepspeed finetune_codes/ds_config_zero3.json
+    --deepspeed finetune_codes/ds_config_zero3.json \
+    --load_audio_head False

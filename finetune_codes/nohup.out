@@ -1,0 +1,70 @@
+开始音频语义编码提取...
+输入文件: /mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/xab
+输出文件: /mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/b.log
+批量大小: 32
+进程数: 8
+使用GPU: 0,1,2,3,4,5,6,7
+================================
+/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/_distutils_hack/__init__.py:53: UserWarning: Reliance on distutils from stdlib is deprecated. Users must rely on setuptools to provide the distutils module. Avoid importing distutils or import setuptools first, and avoid setting SETUPTOOLS_USE_DISTUTILS=stdlib. Register concerns at https://github.com/pypa/setuptools/issues/new?template=distutils-deprecation.yml
+  warnings.warn(
+/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/_distutils_hack/__init__.py:53: UserWarning: Reliance on distutils from stdlib is deprecated. Users must rely on setuptools to provide the distutils module. Avoid importing distutils or import setuptools first, and avoid setting SETUPTOOLS_USE_DISTUTILS=stdlib. Register concerns at https://github.com/pypa/setuptools/issues/new?template=distutils-deprecation.yml
+  warnings.warn(
+/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/_distutils_hack/__init__.py:53: UserWarning: Reliance on distutils from stdlib is deprecated. Users must rely on setuptools to provide the distutils module. Avoid importing distutils or import setuptools first, and avoid setting SETUPTOOLS_USE_DISTUTILS=stdlib. Register concerns at https://github.com/pypa/setuptools/issues/new?template=distutils-deprecation.yml
+  warnings.warn(
+/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/_distutils_hack/__init__.py:53: UserWarning: Reliance on distutils from stdlib is deprecated. Users must rely on setuptools to provide the distutils module. Avoid importing distutils or import setuptools first, and avoid setting SETUPTOOLS_USE_DISTUTILS=stdlib. Register concerns at https://github.com/pypa/setuptools/issues/new?template=distutils-deprecation.yml
+  warnings.warn(
+/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/_distutils_hack/__init__.py:53: UserWarning: Reliance on distutils from stdlib is deprecated. Users must rely on setuptools to provide the distutils module. Avoid importing distutils or import setuptools first, and avoid setting SETUPTOOLS_USE_DISTUTILS=stdlib. Register concerns at https://github.com/pypa/setuptools/issues/new?template=distutils-deprecation.yml
+  warnings.warn(
+/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/_distutils_hack/__init__.py:53: UserWarning: Reliance on distutils from stdlib is deprecated. Users must rely on setuptools to provide the distutils module. Avoid importing distutils or import setuptools first, and avoid setting SETUPTOOLS_USE_DISTUTILS=stdlib. Register concerns at https://github.com/pypa/setuptools/issues/new?template=distutils-deprecation.yml
+  warnings.warn(
+/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/_distutils_hack/__init__.py:53: UserWarning: Reliance on distutils from stdlib is deprecated. Users must rely on setuptools to provide the distutils module. Avoid importing distutils or import setuptools first, and avoid setting SETUPTOOLS_USE_DISTUTILS=stdlib. Register concerns at https://github.com/pypa/setuptools/issues/new?template=distutils-deprecation.yml
+  warnings.warn(
+/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/_distutils_hack/__init__.py:53: UserWarning: Reliance on distutils from stdlib is deprecated. Users must rely on setuptools to provide the distutils module. Avoid importing distutils or import setuptools first, and avoid setting SETUPTOOLS_USE_DISTUTILS=stdlib. Register concerns at https://github.com/pypa/setuptools/issues/new?template=distutils-deprecation.yml
+  warnings.warn(
+/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/_distutils_hack/__init__.py:53: UserWarning: Reliance on distutils from stdlib is deprecated. Users must rely on setuptools to provide the distutils module. Avoid importing distutils or import setuptools first, and avoid setting SETUPTOOLS_USE_DISTUTILS=stdlib. Register concerns at https://github.com/pypa/setuptools/issues/new?template=distutils-deprecation.yml
+  warnings.warn(
+使用 8 个进程
+当前进程: 0/8
+设备: cuda:0
+Error parsing line 0 in /mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/xab: Expecting value: line 1 column 1 (char 0)
+Error parsing line 0 in /mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/xab: Expecting value: line 1 column 1 (char 0)
+Error parsing line 0 in /mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/xab: Expecting value: line 1 column 1 (char 0)
+Error parsing line 0 in /mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/xab: Expecting value: line 1 column 1 (char 0)
+Error parsing line 0 in /mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/xab: Expecting value: line 1 column 1 (char 0)
+Error parsing line 0 in /mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/xab: Expecting value: line 1 column 1 (char 0)
+Error parsing line 0 in /mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/xab: Expecting value: line 1 column 1 (char 0)
+Error parsing line 0 in /mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/xab: Expecting value: line 1 column 1 (char 0)
+W0129 16:49:44.080000 6114 site-packages/torch/distributed/elastic/agent/server/api.py:719] Received Signals.SIGTERM death signal, shutting down workers
+W0129 16:49:44.081000 6114 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 6245 closing signal SIGTERM
+W0129 16:49:44.081000 6114 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 6246 closing signal SIGTERM
+W0129 16:49:44.081000 6114 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 6247 closing signal SIGTERM
+W0129 16:49:44.082000 6114 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 6248 closing signal SIGTERM
+W0129 16:49:44.082000 6114 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 6249 closing signal SIGTERM
+W0129 16:49:44.082000 6114 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 6250 closing signal SIGTERM
+W0129 16:49:44.082000 6114 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 6251 closing signal SIGTERM
+W0129 16:49:44.083000 6114 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 6252 closing signal SIGTERM
+Traceback (most recent call last):
+  File "/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/bin/accelerate", line 7, in <module>
+    sys.exit(main())
+  File "/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/accelerate/commands/accelerate_cli.py", line 50, in main
+    args.func(args)
+  File "/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/accelerate/commands/launch.py", line 1226, in launch_command
+    multi_gpu_launcher(args)
+  File "/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/accelerate/commands/launch.py", line 853, in multi_gpu_launcher
+    distrib_run.run(args)
+  File "/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/torch/distributed/run.py", line 909, in run
+    elastic_launch(
+  File "/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 138, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 260, in launch_agent
+    result = agent.run()
+  File "/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/torch/distributed/elastic/metrics/api.py", line 137, in wrapper
+    result = f(*args, **kwargs)
+  File "/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/torch/distributed/elastic/agent/server/api.py", line 711, in run
+    result = self._invoke_run(role)
+  File "/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/torch/distributed/elastic/agent/server/api.py", line 870, in _invoke_run
+    time.sleep(monitor_interval)
+  File "/mnt/pfs_l2/jieti_team/SFT/hupeng/tools/anaconda3/miniconda3/envs/kimi/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 84, in _terminate_process_handler
+    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
+torch.distributed.elastic.multiprocessing.api.SignalException: Process 6114 got signal: 15
+处理完成！

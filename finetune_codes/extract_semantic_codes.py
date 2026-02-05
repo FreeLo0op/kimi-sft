@@ -24,9 +24,17 @@ def data_loader(input_file:str):
     逐行读取json文件，返回数据项列表
     '''
     data_items = []
+    count = 0
     with open(input_file, 'r', encoding='utf-8') as fin:
-        lines = fin.readlines()
-    logger.info(f"Total {len(lines)} lines in {input_file}")
+        for line in fin:
+            try:
+                data = json.loads(line.strip())
+                data_items.append((data, count))
+                count += 1
+            except Exception as e:
+                logger.error(f"Error reading {input_file} at line {count}: {e}")
+    return data_items
+    
     for line_idx, line in enumerate(lines):
         try:
             data = json.loads(line.strip())

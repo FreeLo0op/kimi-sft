@@ -193,7 +193,8 @@ def main_single_dataset(
     total_duration = 0 # ms
     count = 0
     rtf_list, infer_time_list = [], []
-    for key in tqdm(text_dict, total=len(text_dict), desc="Inference", disable=False):
+    infer_res = {}
+    for key in tqdm(text_dict, total=len(text_dict), desc="Inference", disable=False, colour="green"):
         # try:
         ref_text = text_dict[key]
         infer_audio_content = audio_dict.get(key, None)
@@ -201,16 +202,16 @@ def main_single_dataset(
             continue
         input_text = infer_text_content.format(ref_text)
         duration = (librosa.get_duration(filename=infer_audio_content, sr=16000)) * 1000  # ms
-        start_time = time.time()
+        # start_time = time.time()
         text, text_probs = inference(model, input_text, infer_audio_content)
-        end_time = time.time()
+        # end_time = time.time()
         
-        infer_time = (end_time - start_time) * 1000  # ms
-        infer_time_list.append(infer_time)
-        total_duration += duration
-        if duration > 0:
-            rtf_list.append(infer_time / duration)
-            # print(f'{key}\t{infer_time}\t{duration}')
+        # infer_time = (end_time - start_time) * 1000  # ms
+        # infer_time_list.append(infer_time)
+        # total_duration += duration
+        # if duration > 0:
+        #     rtf_list.append(infer_time / duration)
+        #     # print(f'{key}\t{infer_time}\t{duration}')
 
         score = text.strip()
         score = str(SCORE_CODE_MAP.get(score, -1))
@@ -218,21 +219,34 @@ def main_single_dataset(
         # except Exception as e:
         #     print(f"Error processing {key}: {e}")
         #     score = 0
-        fo.write(f'{key}\t{score}\t{text_probs}\n')
-        fo.flush()
+        # fo.write(f'{key}\t{score}\t{text_probs}\n')
+        # fo.flush()
+        infer_res[key] = [ref_text, score]
         # count += 1
         # if count == 100:break
+    for key in infer_res:
+        ref_text, score = infer_res[key]
+        fo.write(f'{key}\t{ref_text}\t{score}\n')
     fo.close()
 
-    infer_statistic(rtf_list, infer_time_list, total_duration, statistic_fo)    
+    # infer_statistic(rtf_list, infer_time_list, total_duration, statistic_fo)
 
 if __name__ == "__main__":
 
     # os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
 
-    model_path = sys.argv[1]
-    text_file = sys.argv[2]
-    audio_file = sys.argv[3]
-    output_file = sys.argv[4]
+    # model_path = sys.argv[1]
+    # text_file = sys.argv[2]
+    # audio_file = sys.argv[3]
+    # output_file = sys.argv[4]
+    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.3/infer_model'
 
-    main_single_dataset(model_path, text_file, audio_file, output_file)
+    text_files = ['/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/wangxiao/label_snt_score', '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/open_source/LibriSpeech/train/label_snt_score']
+    audio_files = ['/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/wangxiao/wavpath_30', '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/open_source/LibriSpeech/train/wavpath_30']
+    output_files = ['/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/wangxiao/label_snt_score_kimi_v3.3', '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/open_source/LibriSpeech/train/label_snt_score_kimi_v3.3']
+    for i in range(len(text_files)):
+        text_file = text_files[i]
+        audio_file = audio_files[i]
+        output_file = output_files[i]
+
+        main_single_dataset(model_path, text_file, audio_file, output_file)

@@ -23,8 +23,28 @@ from finetune_codes.model import KimiAudioModel
 from finetune_codes.datasets import LazySupervisedDataset
 from finetune_codes.configuration_moonshot_kimia import KimiAudioConfig
 
-logging.basicConfig(level=logging.INFO)
+import logging
+
+# 设置日志格式，包含文件名和行号
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
+)
+
+# 创建 logger
 logger = logging.getLogger(__name__)
+
+# 获取根 logger 的 handler 并设置格式
+root_logger = logging.getLogger()
+if root_logger.handlers:
+    for handler in root_logger.handlers:
+        handler.setFormatter(formatter)
+else:
+    # 如果没有 handler，创建一个并设置格式
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    root_logger.addHandler(handler)
+
+logging.basicConfig(level=logging.INFO)
 
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
 random.seed(42)
@@ -196,6 +216,11 @@ def train():
         device_map=None,
         **model_load_kwargs
     )
+
+    model.freeze_prefix(['model.layers', 'model.mimo_layers', 'model.embed_tokens', 'model.norm', 'lm_head', 'mimo_output', 'model.mimo_norm'])
+    model.print_trainable_summary()
+    # sys.exit(1)
+
     text_tokenizer = AutoTokenizer.from_pretrained(
         cache_path, trust_remote_code=True
     )

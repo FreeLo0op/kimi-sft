@@ -2,7 +2,7 @@ import sys
 from torch.utils.data import Dataset
 from functools import lru_cache
 import torch
-from typing import Dict, List
+from typing import Dict, List, Optional
 from kimia_infer.utils.special_tokens import instantiate_extra_tokens
 from kimia_infer.utils.data import KimiAContent
 import librosa
@@ -36,7 +36,7 @@ class LazySupervisedDataset(Dataset):
         return len(self.raw_data)
     
     def extract_whisper_feat(self, wav: str):
-        wav = librosa.load(wav, sr=16000)[0]
+        wavform = librosa.load(wav, sr=16000)[0]
         # if isinstance(wav, str):
         #     wav = librosa.load(wav, sr=16000)[0]
 
@@ -53,7 +53,7 @@ class LazySupervisedDataset(Dataset):
         #     int(continous_feature.shape[1] // 4),
         #     continous_feature.shape[2] * 4,
         # )
-        return wav
+        return wavform
 
     def _tokenize_text(self, text):
         if text is None:
@@ -88,11 +88,8 @@ class LazySupervisedDataset(Dataset):
         if message["message_type"] == "text":
             text = message["content"]
             text_tokens = self._tokenize_text(text)
-
-            audio_tokens_len = len(kimia_content_msg.audio_token_ids)
-            if len(text_tokens) + audio_tokens_len > self.max_len:
-                # print("debug: text_tokens too long, truncating", audio_tokens_len, len(text_tokens), self.max_len)
-                text_tokens = text_tokens[: self.max_len - audio_tokens_len]
+            if len(text_tokens) > self.max_len:
+                text_tokens = text_tokens[: self.max_len]
 
             kimia_content_msg.text_extend(text_tokens, has_loss)
             kimia_content_msg.audio_extend(

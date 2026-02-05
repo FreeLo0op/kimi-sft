@@ -8,7 +8,7 @@ import warnings
 import pandas as pd
 from kimia_infer.api.kimia import KimiAudio
 warnings.filterwarnings("ignore")
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 sampling_params = {
     "audio_temperature": 0.8,
     "audio_top_k": 1,
@@ -93,7 +93,7 @@ def main_abnormal_dataset(
 if __name__ == "__main__":
     data_input = sys.argv[1]
     infer_fo = sys.argv[2]
-    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.4/infer_model'
+    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.3/infer_model'
     # data_input = ''
     # # csv文件；至少包含wavname、wavpath、text三列表头；分隔符：制表符('\t')
     # # 示例：/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/label_only_abnormal.csv

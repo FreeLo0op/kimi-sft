@@ -299,6 +299,7 @@ def main_abnormal_dataset(
 
 def main_asr(model_path:str, infer_data:str, fo_path:str):
     infer_text_content = "你是一个识别助手，根据用户提供的音频，直接返回识别结果。[TASK:speech recognition] "
+    infer_text_content = "Please transcribe the following audio:"
     model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:0')
 
     asr_fo = open(fo_path, "w", encoding="utf-8")
@@ -318,25 +319,29 @@ def main_asr(model_path:str, infer_data:str, fo_path:str):
                 input_audio=infer_audio_content,
                 max_new_tokens=512
             )
-            text = text.strip().split('识别结果为：')[-1]
-            text = ast.literal_eval(text)
-            text = ' '.join(text)
+            # text = text.strip().split('识别结果为：')[-1]
+            # text = ast.literal_eval(text)
+            # text = ' '.join(text)
             asr_fo.write(f'{key}\t{ori_text}\t{text}\n')
         except Exception as e:
             continue
 
 def main_single_data():
-    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v2.7/model_infer'
+    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B-Instruct'
+    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.3/infer_model'
     model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:0')
 
     infer_text_content = "你是一个智慧助手，检测下文是否存在语法错误，如果存在请指出错在哪里：Mike is my friend. He go to school yesterday."
+    infer_text_content = "你是一个识别助手，根据用户提供的音频，直接返回识别结果。[TASK:speech recognition] "
+    # infer_text_content = "Please transcribe the following audio:"
 
-    infer_audio_content = None
-
+    infer_audio_content = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/wavs/wavs_260107/17676730533581458071995346747392.wav'
+    print(infer_text_content)
     text, text_probs = inference(
         model=model,
         input_text=infer_text_content,
         input_audio=infer_audio_content,
+        max_new_tokens=512
     )
     print(text)
 
@@ -351,8 +356,8 @@ if __name__ == "__main__":
     #     gpu_id=gpu_id,
     #     model_path=model_path
     # )
-    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.6/infer_model_b1'
-    # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.3/infer_model'
+    # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.6/infer_model_b1'
+    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.3/infer_model'
 
     files = [
         '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_snt_score_batch1',
@@ -360,10 +365,10 @@ if __name__ == "__main__":
         '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_snt_score_batch4',
         '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_sent_score'
     ]
-    for file in files:
-        main_single_dataset(model_path, file)
+    # for file in files:
+    #     main_single_dataset(model_path, file)
 
-    # file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_snt_score_merged'
+    file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_snt_score_merged'
     # file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/tal-k12/test/label_sent_score'
     # main_single_dataset(model_path, file)
 
@@ -379,8 +384,8 @@ if __name__ == "__main__":
     # main_single_data()
 
 
-    # main_asr(
-    #     model_path=model_path,
-    #     infer_data='/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/train/label_260119.csv',
-    #     fo_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/data/SpeechAug/database/asr_infer_res.tsv'
-    # )
+    main_asr(
+        model_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B-Instruct',
+        infer_data='/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/noise_asr_testdataset.csv',
+        fo_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/noise_asr_testdataset_kimi.csv'
+    )

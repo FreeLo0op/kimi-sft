@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-MAX_WORKERS = 48
+MAX_WORKERS = 128
 MAX_AUDIO_DURATION = 30  # seconds
 
 # global config
@@ -105,16 +105,16 @@ def _safe_convert(old_prompt):
 
 def main_base(
         dataset_dir:str,
-        save_dir:str
+        output_path:str
 ):
+    new_prompts = []
+    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+        logger.info(f"File exists, skip: {output_path}")
+        return
+    
     for dataset in os.listdir(dataset_dir):
         if dataset.endswith('json'):
             dataset_path = os.path.join(dataset_dir, dataset)
-            output_path = os.path.join(save_dir, dataset)
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                logger.info(f"File exists, skip: {output_path}")
-                continue
-            new_prompts = []
             counter = 0
             logger.info(f"Processing dataset: {dataset_path}")
             with open(dataset_path, 'r', encoding='utf-8') as f:
@@ -128,16 +128,12 @@ def main_base(
                         if new_prompt:
                             new_prompts.append(new_prompt)
                             counter += 1
-
             logger.info(f"Processed {counter}/{len(old_prompts)} valid prompts from {dataset}, {len(old_prompts)-counter} invalid prompts are removed.")
 
-            save_root = os.path.dirname(output_path)
-            if not os.path.exists(save_root):
-                os.makedirs(save_root, exist_ok=True)
-            with open(output_path, 'w', encoding='utf-8') as f:
-                for item in new_prompts:
-                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
-                    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        for item in new_prompts:
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+                        
         # 测试中断
         # break
 
@@ -222,16 +218,16 @@ def main_sft(
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
 if __name__ == "__main__":
-    main_sft(
-        dataset_type='train',
-        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/train_30_0121.json'
-    )
-    main_sft(
-        dataset_type='eval',
-        save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/eval_30_0121.json'
-    )
-
-    # main_base(
-    #     dataset_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/base_model_v4/eval',
-    #     save_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/base/dev/single_datasets'
+    # main_sft(
+    #     dataset_type='train',
+    #     save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/train/train_30_0121.json'
     # )
+    # main_sft(
+    #     dataset_type='eval',
+    #     save_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/sft/dev/eval_30_0121.json'
+    # )
+
+    main_base(
+        dataset_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/CPT_v1_Stage1/train',
+        output_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/train_30.jsonl'
+    )

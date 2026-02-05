@@ -839,7 +839,8 @@ class MoonshotKimiaModel(Qwen2PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (mimo_hidden_states,)
         else:
-            mimo_hidden_states = hidden_states.clone()
+            # mimo_hidden_states = hidden_states.clone()
+            mimo_hidden_states = None
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
@@ -906,9 +907,11 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
             p.requires_grad = any(name.startswith(pref) for pref in keep_prefixes)
 
     def print_trainable_summary(self):
-        for name, p in self.named_parameters():
-            if p.requires_grad:
-                print(f"训练层：{name}: requires_grad={p.requires_grad}, shape={tuple(p.shape)}")
+        # rank 0 only
+        if torch.distributed.get_rank() == 0:
+            for name, p in self.named_parameters():
+                if p.requires_grad:
+                    print(f"Trainable layer: {name}: requires_grad={p.requires_grad}, shape={tuple(p.shape)}")
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -991,7 +994,7 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel):
         if self.config.load_audio_head:
             audio_logits = self.mimo_output(mimo_hidden_states)
         else:
-            audio_logits = text_logits
+            audio_logits = None
 
         if not return_dict:
             output = (text_logits, audio_logits) + outputs[2:]
