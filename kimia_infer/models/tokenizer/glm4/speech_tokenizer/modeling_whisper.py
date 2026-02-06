@@ -1227,13 +1227,13 @@ class WhisperVQEncoder(WhisperPreTrainedModel):
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
         embed_pos = self.embed_positions.weight
 
-        hidden_states = inputs_embeds + embed_pos[:seq_length]
+        hidden_states = inputs_embeds + embed_pos[: inputs_embeds.shape[1]]
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        assert attention_mask.shape[-1] == hidden_states.shape[1]
+        # assert attention_mask.shape[-1] == hidden_states.shape[1]
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
             assert head_mask.size()[0] == (

@@ -166,11 +166,13 @@ class KimiAudio(object):
             
             return None, return_text_tokens, return_text_tokens_probs
 
+
     @torch.inference_mode()
     def _generate_loop(
         self,
-        audio_input_ids: torch.Tensor,  # input audio tokens
-        text_input_ids: torch.Tensor = None,  # input text tokens if use multi-input
+        audio_input_ids: torch.Tensor,
+        text_input_ids: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
         max_new_tokens: int = 50,
         audio_top_k: int = 5,
         audio_temperature: float = 0.0,
@@ -184,6 +186,7 @@ class KimiAudio(object):
         continous_feature: torch.Tensor = None,
         output_type: str = "text",
     ):
+        batch_size = audio_input_ids.shape[0]
         sampler = KimiASampler(
             audio_top_k=audio_top_k,
             audio_temperature=audio_temperature,
@@ -195,42 +198,63 @@ class KimiAudio(object):
             text_repetition_window_size=text_repetition_window_size,
         )
 
-        text_stream_is_finished = False
+        text_stream_is_finished = torch.zeros(batch_size, dtype=torch.bool, device=self.device)
+        audio_stream_is_finished = torch.zeros(batch_size, dtype=torch.bool, device=self.device) # Only used for 'both' mode
+        
+        # Output buffers [Batch, MaxLen]
         previous_audio_tokens = torch.zeros(
-            (4096,),
+            (batch_size, 4096),
             dtype=torch.int,
             device=self.device,
         )
         text_previous_tokens = torch.zeros(
-            (4096,),
+            (batch_size, 4096),
             dtype=torch.int,
             device=self.device,
         )
         text_previous_tokens_prob = torch.zeros(
-            (4096,),
+            (batch_size, 4096),
             dtype=torch.float,
             device=self.device,
         )
 
         decoder_input_audio_ids = audio_input_ids.clone()
         decoder_input_text_ids = text_input_ids.clone()
+        
+        # Position IDs: [Batch, Seq]
+        # Assuming Left Padding for input, we want generation to continue from the last non-pad token?
+        # Standard approach with Left Padding: position_ids are correct (0..L-1).
+        # We construct position_ids based on seq len.
         decoder_position_ids = (
             torch.arange(
                 0, decoder_input_audio_ids.shape[1], device=self.device
             )
             .unsqueeze(0)
             .long()
+            .repeat(batch_size, 1)
         )
+        
         decoder_input_whisper_feature = continous_feature
         decoder_is_continuous_mask = is_continuous_mask
         past_key_values = None
 
-        last_position_id = decoder_input_audio_ids.shape[1] - 1
-
-        valid_text_length = 0
-        valid_audio_length = 0
+        last_position_id = decoder_input_audio_ids.shape[1] - 1 # This is scalar, but distinct for batches?
+        # Actually with Left Padding, we just append to the right. 
+        # Position IDs just increment.
+        
+        # Valid length trackers
+        valid_text_length = torch.zeros(batch_size, dtype=torch.long, device=self.device)
+        valid_audio_length = torch.zeros(batch_size, dtype=torch.long, device=self.device)
 
         for i in range(max_new_tokens):
+            # Attention mask needs to be updated? 
+            # forward accepts attention_mask. For the first step we pass the padded mask.
+            # Subsequent steps: we pass None (if using cache, model usually updates/handles it?)
+            # Usually with past_key_values, we just pass new tokens.
+            
+            # Using custom attention_mask if provided
+            current_attention_mask = attention_mask if i == 0 else None
+            
             audio_logits, text_logits, past_key_values = self.alm.forward(
                 input_ids=decoder_input_audio_ids,
                 text_input_ids=decoder_input_text_ids,
@@ -238,108 +262,134 @@ class KimiAudio(object):
                 is_continuous_mask=decoder_is_continuous_mask,
                 position_ids=decoder_position_ids,
                 past_key_values=past_key_values,
+                attention_mask=current_attention_mask,
                 return_dict=False,
             )
+            
+            # Squeeze dim 1 if present [B, 1, V] -> [B, V]
+            if len(text_logits.shape) == 3:
+                text_logits = text_logits[:,-1,:]
+            if len(audio_logits.shape) == 3:
+                audio_logits = audio_logits[:,-1,:]
+
+            recent_text = text_previous_tokens[:, :i] if i > 0 else None
             next_token_text, max_prob_text = sampler.sample_text_logits(
-                text_logits, recent_tokens=text_previous_tokens[:i] if i > 0 else None
+                text_logits, recent_tokens=recent_text
             )
-            # Sample audio token using the sampler
+            
+            recent_audio = previous_audio_tokens[:, :i] if i > 0 else None
             next_audio_token = sampler.sample_audio_logits(
-                audio_logits, recent_tokens=previous_audio_tokens[:i] if i > 0 else None
+                audio_logits, recent_tokens=recent_audio
             )
 
-            if text_stream_is_finished:
-                next_token_text.fill_(self.extra_tokens.kimia_text_blank)
-                max_prob_text.fill_(1.0)
-            elif next_token_text.item() == self.extra_tokens.kimia_text_eos:
-                text_stream_is_finished = True
-            else:
-                valid_text_length += 1
+            # Update finished status
+            eos_mask = (next_token_text == self.extra_tokens.kimia_text_eos)
+            text_stream_is_finished = text_stream_is_finished | eos_mask
+            
+            # Override finished tokens with Blank/Pad
+            next_token_text = torch.where(text_stream_is_finished, 
+                                          torch.tensor(self.extra_tokens.kimia_text_blank, device=self.device), 
+                                          next_token_text)
+            
+            # Only increment valid length if not finished (and not just became finished)
+            # Actually valid length includes EOS usually? Let's exclude EOS and pads for detokenizer convenience
+            # If just became finished (eos_mask is True), we don't count it as "text content" usually?
+            # Existing code: if eos, break. 
+            # Here parallel: valid_length += 1 where not finished.
+            
+            # We increment for those who were NOT finished before this step.
+            # Actually easier: just store everything and clip later by checking EOS index.
+            valid_text_length += (~text_stream_is_finished).long() 
+            # Note: if EOS occurs, text_stream_is_finished becomes True. 
+            # We want to record EOS? Detokenize usually stops before EOS.
+            
+            text_previous_tokens[:, i] = next_token_text
+            text_previous_tokens_prob[:, i] = max_prob_text
 
-            text_previous_tokens[i : i + 1] = next_token_text
-            text_previous_tokens_prob[i : i + 1] = max_prob_text
-
+            # Audio Logic
+            # Init audio blanking for delay
             if i < self.kimia_text_audiodelaytokens:
                 next_audio_token.fill_(self.extra_tokens.kimia_text_blank)
             else:
                 if output_type == "text":
                     next_audio_token.fill_(self.extra_tokens.kimia_text_blank)
                 else:
-                    valid_audio_length += 1
+                    # Check audio EOS
+                    # eod_ids is list, convert to tensor for efficient checking
+                    # audio_stream_is_finished check
+                     is_audio_eos = torch.isin(next_audio_token, torch.tensor(self.eod_ids, device=self.device))
+                     audio_stream_is_finished = audio_stream_is_finished | is_audio_eos
+                     
+                     next_audio_token = torch.where(audio_stream_is_finished,
+                                                    torch.tensor(self.extra_tokens.kimia_text_blank, device=self.device),
+                                                    next_audio_token)
+                     
+                     # Increment valid length
+                     valid_audio_length += (~audio_stream_is_finished).long()
 
-            previous_audio_tokens[i : i + 1] = next_audio_token
+            previous_audio_tokens[:, i] = next_audio_token
 
-            audio_stream_is_finished = next_audio_token.item() in self.eod_ids
-
-            if (
-                output_type == "text"
-                and text_stream_is_finished
-                or output_type == "both"
-                and audio_stream_is_finished
-            ):
-                return_text_tokens = (
-                    text_previous_tokens[:valid_text_length]
-                    .detach()
-                    .cpu()
-                    .numpy()
-                    .tolist()
-                )
-                return_text_tokens_probs = (
-                    text_previous_tokens_prob[:valid_text_length]
-                    .detach()
-                    .cpu()
-                    .numpy()
-                    .tolist()
-                )
-                return_audio_tokens = (
-                    previous_audio_tokens[
-                        self.kimia_text_audiodelaytokens : valid_audio_length
-                        + self.kimia_text_audiodelaytokens
-                    ]
-                    .detach()
-                    .cpu()
-                    .numpy()
-                    .tolist()
-                )
-                return return_audio_tokens, return_text_tokens, return_text_tokens_probs
-            else:
-                decoder_input_audio_ids = next_audio_token.unsqueeze(1)
-                decoder_input_text_ids = next_token_text.unsqueeze(1)
-
-                decoder_position_ids = (
-                    torch.zeros(1, 1, device=self.device)
+            # Check global finish
+            if output_type == "text":
+                if text_stream_is_finished.all():
+                    break
+            elif output_type == "both":
+                if text_stream_is_finished.all() and audio_stream_is_finished.all():
+                    break
+            
+            # Prepare next step
+            decoder_input_audio_ids = next_audio_token.unsqueeze(1)
+            decoder_input_text_ids = next_token_text.unsqueeze(1)
+            
+            # Update Position IDs
+            last_position_id += 1
+            decoder_position_ids = (
+                    torch.zeros(batch_size, 1, device=self.device)
                     .fill_(last_position_id + 1)
                     .long()
-                    .view(1, 1)
-                )
-                last_position_id += 1
+            )
+            
+            # Update attention_mask if we were explicitly passing it (we passed it 1st step)
+            # For next steps with cache, we append 1s to attention mask effectively.
+            if attention_mask is not None:
+                # We need to maintain the full attention mask [B, L_current]
+                attention_mask = torch.cat([attention_mask, torch.ones(batch_size, 1, device=self.device, dtype=torch.long)], dim=1)
+                
+            decoder_input_whisper_feature = None
+            decoder_is_continuous_mask = None
 
-                decoder_input_whisper_feature = None
-                decoder_is_continuous_mask = None
-
-        return_text_tokens = (
-            text_previous_tokens[:valid_text_length].detach().cpu().numpy().tolist()
-        )
-        return_text_tokens_probs = (
-            text_previous_tokens_prob[:valid_text_length].detach().cpu().numpy().tolist()
-        )
-        return_audio_tokens = (
-            previous_audio_tokens[
-                self.kimia_text_audiodelaytokens : valid_audio_length
-                + self.kimia_text_audiodelaytokens
-            ]
-            .detach()
-            .cpu()
-            .numpy()
-            .tolist()
-        )
+        # Post-Processing: Convert results to List[List]
+        return_text_tokens = []
+        return_text_tokens_probs = []
+        return_audio_tokens = []
         
+        for b in range(batch_size):
+            t_len = valid_text_length[b]
+            a_len = valid_audio_length[b]
+            
+            return_text_tokens.append(text_previous_tokens[b, :t_len].detach().cpu().numpy().tolist())
+            return_text_tokens_probs.append(text_previous_tokens_prob[b, :t_len].detach().cpu().numpy().tolist())
+            
+            if output_type == "both":
+                # Audio start index is kimia_text_audiodelaytokens
+                # valid_audio_length counts effective tokens AFTER delay (because we didn't increment during delay)
+                # But previous_audio_tokens buffer has delay tokens filled with Blank.
+                # Logic above: if i < delay: blank. else: if valid: valid+=1.
+                # So we want to return tokens from delay to delay + val_len.
+                start = self.kimia_text_audiodelaytokens
+                end = start + a_len
+                # Check bounds
+                end = min(end, max_new_tokens)
+                return_audio_tokens.append(previous_audio_tokens[b, start:end].detach().cpu().numpy().tolist())
+            else:
+                return_audio_tokens.append([])
+
         return return_audio_tokens, return_text_tokens, return_text_tokens_probs
 
     @torch.inference_mode()
     def generate(
         self,
-        chats: list[dict],
+        chats: list[dict] | list[list[dict]],
         output_type="text",
         audio_temperature=0.0,
         audio_top_k=5,
@@ -351,32 +401,29 @@ class KimiAudio(object):
         text_repetition_window_size=16,
         max_new_tokens=2048,
     ):
-        ## TODO: 需要一个check函数，检查输入的history格式是否合法
-        ## 比如，对于ASR任务，一定是: text-instruction/audio-instruction + audio-content, 我理解content和instruction是不能换位置的
-        ## assistant前必须有user等等，我觉得最好做一下check
-
-        # assert output_type in ["text", "both"]
-        history = self.prompt_manager.get_prompt(chats, output_type=output_type)
-        audio_input_ids, text_input_ids, is_continuous_mask, _, _ = history.to_tensor()
-        audio_features = history.continuous_feature
-        generated_text_tokens, generated_text_tokens_probs = [], []
-        generated_wav_tokens = []
-        # if output_type == "both":
-        #     generated_wav_tokens = []
-        #     max_new_tokens = int(12.5 * 120) - audio_input_ids.shape[1]
-        # else:
-        #     if max_new_tokens == -1:
-        #         max_new_tokens = 7500 - audio_input_ids.shape[1]
+        ## Check format logic skipped for now
         
-        audio_input_ids = audio_input_ids.to(self.device)
-        text_input_ids = text_input_ids.to(self.device)
-        is_continuous_mask = is_continuous_mask.to(self.device)
+        is_single_input = False
+        if len(chats) > 0 and isinstance(chats[0], dict):
+            chats_batch = [chats]
+            is_single_input = True
+        else:
+            chats_batch = chats
 
-        # audio_features = [f.to(self.device) for f in audio_features]
+        # Batch processing
+        batch_content = self.prompt_manager.get_batch_prompt(chats_batch, output_type=output_type)
+        batch_content.to(self.device)
+        
+        audio_input_ids = batch_content.audio_input_ids
+        text_input_ids = batch_content.text_input_ids
+        is_continuous_mask = batch_content.is_continuous_mask
+        attention_mask = batch_content.attention_mask
+        audio_features = batch_content.continuous_feature # This is a flattened list of tensors
+
         generated_wav_tokens, generated_text_tokens, generated_text_tokens_probs = self._generate_loop(
-        # generated_wav_tokens, generated_text_tokens, generated_text_tokens_probs = self._generate_text_only(
             audio_input_ids=audio_input_ids,
             text_input_ids=text_input_ids,
+            attention_mask=attention_mask,
             max_new_tokens=max_new_tokens,
             audio_temperature=audio_temperature,
             audio_top_k=audio_top_k,
@@ -391,35 +438,52 @@ class KimiAudio(object):
             output_type=output_type,
         )
 
-        if output_type == "both":
-            generated_wav_tokens = [
-                t for t in generated_wav_tokens if t >= self.kimia_token_offset
-            ]  #  filter out the illegal tokens
-
-            generated_wav_tokens = torch.tensor(generated_wav_tokens).unsqueeze(0)
-            generated_wav_tokens = generated_wav_tokens - self.kimia_token_offset
+        generated_wavs = []
+        generated_texts = []
+        
+        # Process output batch
+        for b in range(len(generated_text_tokens)):
+            # Text
+            text_toks = [
+                t for t in generated_text_tokens[b] if t < self.kimia_token_offset
+            ]
+            generated_texts.append(self.detokenize_text([text_toks])[0]) # Pass list of 1 list
             
-            if self.detokenizer is not None and output_type == "both":
-                generated_wav = self.detokenize_audio(generated_wav_tokens)
-        else:
-            generated_wav = None
+            # Audio
+            if output_type == "both":
+                wav_toks = [t for t in generated_wav_tokens[b] if t >= self.kimia_token_offset]
+                if wav_toks:
+                    wav_tensor = torch.tensor(wav_toks).unsqueeze(0) - self.kimia_token_offset
+                    if self.detokenizer is not None:
+                        # Assuming detokenize_audio can handle 1 item, we loop.
+                        # Can optimize later if detokenizer supports batch.
+                        gen_wav = self.detokenize_audio(wav_tensor)
+                        generated_wavs.append(gen_wav)
+                    else:
+                        generated_wavs.append(None)
+                else:
+                    generated_wavs.append(None)
+            else:
+                generated_wavs.append(None)
 
-        generated_text_tokens = [
-            t for t in generated_text_tokens if t < self.kimia_token_offset
-        ]
-        generated_text = self.detokenize_text(generated_text_tokens)
-        return generated_wav, generated_text, generated_text_tokens_probs
+        if is_single_input:
+            return generated_wavs[0], generated_texts[0], generated_text_tokens_probs[0]
+        else:
+            return generated_wavs, generated_texts, generated_text_tokens_probs
 
     def detokenize_audio(self, audio_tokens):
+        # audio_tokens shape: [1, Len] as passed from loop above.
+        # But if we want to change signature to support batch, we can.
+        # For now, keeping signature compatible with single item usage inside loop.
         if self.detokenizer is None:
             raise ValueError("Detokenizer is not initialized")
-        self.detokenizer.clear_states()
-        chunk_size = 30  # hard-coded right now
+        self.detokenizer.clear_states() # Reset for each sample
+        chunk_size = 30  
         first_chunk_size = 30
         cache_speech_collection = []
-        audio_tokens = audio_tokens.to(self.device)
-        audio_tokens = audio_tokens.long()
+        audio_tokens = audio_tokens.to(self.device).long()
         num_audio_tokens = audio_tokens.size(1)
+        
         first_chunk_semantic_tokens = audio_tokens[:, :first_chunk_size]
         gen_speech = self.detokenizer.detokenize_streaming(
             first_chunk_semantic_tokens,
@@ -442,14 +506,14 @@ class KimiAudio(object):
         gen_speech = torch.cat(cache_speech_collection, dim=-1)
         return gen_speech
 
-    def detokenize_text(self, text_tokens):
-        valid_text_ids = []
-        for x in text_tokens:
-            if x == self.extra_tokens.kimia_text_eos:
-                break
-            valid_text_ids.append([x])
-        text = []
-        for token_id in valid_text_ids:
-            text.append(self.prompt_manager.text_tokenizer.decode(token_id))
-        return text
-        # return self.prompt_manager.text_tokenizer.decode(valid_text_ids)
+    def detokenize_text(self, text_tokens_list):
+        # text_tokens_list: List[List[int]]
+        text_batch = []
+        for text_tokens in text_tokens_list:
+            valid_text_ids = []
+            for x in text_tokens:
+                if x == self.extra_tokens.kimia_text_eos:
+                    break
+                valid_text_ids.append(x)
+            text_batch.append(self.prompt_manager.text_tokenizer.decode(valid_text_ids))
+        return text_batch

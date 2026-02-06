@@ -52,10 +52,26 @@ class Glm4Tokenizer(nn.Module):
         if not audio_infos:
             return []
 
-        with torch.no_grad():
-            audio_tokens_batch = extract_speech_token(
-                self.whisper_model, self.feature_extractor, audio_infos
-            )
+        audio_tokens_batch = extract_speech_token(
+            self.whisper_model, self.feature_extractor, audio_infos
+        )
+
+        token_tensors: List[torch.Tensor] = []
+        for tokens in audio_tokens_batch:
+            token_tensor = torch.tensor(tokens, dtype=torch.long).unsqueeze(0)
+            token_tensors.append(token_tensor)
+        return token_tensors
+    
+    def tokenize_batch_tensor(self, inputs: Sequence[torch.Tensor], sr: int = 16000) -> List[torch.Tensor]:
+        audio_infos = []
+        for audio in inputs:
+            if audio.size(0) > 1:
+                audio = audio.mean(dim=0, keepdim=True)
+            audio_infos.append((audio, sr))
+
+        audio_tokens_batch = extract_speech_token(
+            self.whisper_model, self.feature_extractor, audio_infos
+        )
 
         token_tensors: List[torch.Tensor] = []
         for tokens in audio_tokens_batch:

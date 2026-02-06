@@ -19,7 +19,7 @@ class LazySupervisedDataset(Dataset):
         # print('DEBUG max_len: {}'.format(max_len))
 
         print("There are {} samples in the dataset".format(len(raw_data_list)))
-        self.whisper_model = whisper_model
+        # self.whisper_model = whisper_model
 
         print(f"Loading text tokenizer")
         self.text_tokenizer = text_tokenizer
