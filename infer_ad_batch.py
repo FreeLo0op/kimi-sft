@@ -23,7 +23,16 @@ sampling_params = {
     "text_repetition_window_size": 16,
 }
 
-SCORE_CODE_MAP = {'a':0,'b':1,'c':2,'d':3,'e':4,'f':5,'g':6,'h':7,'i':8,'j':9,'k':10}
+SCORE_CODE_MAP = {
+        '0': '正常',  
+        '1': '噪声',
+        '2': '不相关中文',
+        '3': '不相关英文',
+        '4': '无意义语音',
+        '5': '音量小',
+        '6': '开头发音不完整',
+        '7': '空音频'
+    }
 
 def load_text(file:str):
     text_dict = {}
@@ -99,17 +108,15 @@ def batch_inference(model:KimiAudio, batch_data: list, max_new_tokens:int=1) -> 
 def main_single_dataset_batch(
         model_path:str,
         infer_file:str,
-        audio_file:str=None,
+        audio_file:str,
+        fo_path:str,
         batch_size:int=8,
         gpu_id:int=0
     ):
     device = f'cuda:{gpu_id}'
     model = KimiAudio(model_path=model_path, load_detokenizer=False, device=device)
 
-    infer_text_content = '根据音频和评测文本，评测句子整体发音准确性，评分按顺序分为a,b,c,d到k共11档，a档表示0分，k档表示10分，每个档跨度是1分，最后输出档次。评测文本：{}'
-
-    if audio_file is None:
-        audio_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/next/tal-k12/wavpath_merged'
+    infer_text_content = '检测音频类型，包含正常、噪声、不相关中文、不相关英文、无意义语音、音量小、开头发音不完整、空音频八类，分别对应0、1、2、3、4、5、6、7，根据参考文本做出判断。参考文本：{}'
 
     text_dict = load_text(infer_file)
     audio_dict = load_audio(audio_file)
@@ -119,7 +126,6 @@ def main_single_dataset_batch(
     
     print(f"Found {len(sorted_keys)} samples with both text and audio.")
 
-    fo_path = os.path.join(model_path, 'infer_res_batch', os.path.basename(infer_file))
     statistic_fo = fo_path + '.statistic.tsv'
     if not os.path.exists(os.path.dirname(fo_path)):
         os.makedirs(os.path.dirname(fo_path), exist_ok=True)
@@ -210,13 +216,16 @@ def main_single_dataset_batch(
 
 if __name__ == "__main__":
     model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.3/infer_model'
-    infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/next/tal-k12/test/label_sent_score'
-    infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/next/tal-k12/test/label_snt_score_batch2'
-    infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/label_snt_score_ad'
-    # infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/next/tal-k12/test/label_snt_score_merged'
-
+    infer_file = '/mnt/pfs_l2/jieti_team/SFT/speech/fangdongyan/fdy_10.19.36.121/00-code_backup/tal_kh_evl_tools/data_pipeline/files/260206/audio_type.csv'
+    audio_file = '/mnt/pfs_l2/jieti_team/SFT/speech/fangdongyan/fdy_10.19.36.121/00-code_backup/tal_kh_evl_tools/data_pipeline/files/260206/audio_path'
+    fo_path = '/mnt/pfs_l2/jieti_team/SFT/speech/fangdongyan/fdy_10.19.36.121/00-code_backup/tal_kh_evl_tools/data_pipeline/files/260206/audio_type_file.ad.compare_new'
     
     # You can change batch_size here
-    # main_single_dataset_batch(model_path, infer_file, batch_size=8)
-    main_single_dataset_batch(model_path, infer_file, batch_size=8, audio_file='/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/wavpath')
+
+    main_single_dataset_batch(
+        model_path, 
+        infer_file, 
+        audio_file, 
+        fo_path,
+        batch_size=8)
 

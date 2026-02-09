@@ -1038,7 +1038,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
         embed_pos = self.embed_positions.weight
 
-        hidden_states = inputs_embeds + embed_pos
+        hidden_states = inputs_embeds + embed_pos[: inputs_embeds.shape[1]]
         hidden_states = nn.functional.dropout(
             hidden_states, p=self.dropout, training=self.training
         )

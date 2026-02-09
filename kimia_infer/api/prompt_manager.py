@@ -41,7 +41,7 @@ class KimiAPromptManager:
     def __init__(self, model_path:str, audio_tokenizer:str, kimia_token_offset:int, kimia_text_audiodelaytokens:int, device:str):
         self.device = device
         self.audio_tokenizer = Glm4Tokenizer(audio_tokenizer)
-        self.audio_tokenizer = self.audio_tokenizer.to(self.device).bfloat16()
+        self.audio_tokenizer = self.audio_tokenizer.to(self.device)#.bfloat16()
 
         logger.info(f"Looking for resources in {model_path}")
         logger.info(f"Loading whisper model")
@@ -151,6 +151,7 @@ class KimiAPromptManager:
         # Determine max length for padding input
         # 简化的逻辑：直接处理 tensor 列表
         max_len = max([w.shape[-1] for w in wavs])
+        original_lens = [w.shape[-1] for w in wavs]
         
         padded_wavs = []
         for w in wavs:
@@ -170,7 +171,17 @@ class KimiAPromptManager:
             continous_features.shape[2] * 4,
         )
         
-        return [f.unsqueeze(0) for f in continous_features] # Ret [1, L, D] list
+        # Truncate each feature to its valid length (remove padding artifacts)
+        output_list = []
+        hop_length = 160
+        for i, feat in enumerate(continous_features):
+            L = original_lens[i]
+            token_len = (L - 1) // (hop_length * 8) + 1
+            if feat.shape[0] > token_len:
+                feat = feat[:token_len]
+            output_list.append(feat.unsqueeze(0))
+            
+        return output_list
 
     def _process_batch_audios(self, chats_list: List[List[Dict]]):
         # 1. Collect all audio tasks

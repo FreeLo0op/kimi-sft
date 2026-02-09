@@ -1215,7 +1215,11 @@ class WhisperVQEncoder(WhisperPreTrainedModel):
             extended_attention_mask = self.get_block_causal_attention_mask(attention_mask,
                                                                            block_size=self.config.quantize_causal_block_size)
         else:
-            extended_attention_mask = self.get_extended_attention_mask(attention_mask, (batch_size, seq_length))
+            # Fix dynamic sizing issue: seq_length here was derived from static calculation
+            # We should use actual feature map size
+            real_seq_len = attention_mask.shape[1]
+            extended_attention_mask = self.get_extended_attention_mask(attention_mask, (batch_size, real_seq_len))
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

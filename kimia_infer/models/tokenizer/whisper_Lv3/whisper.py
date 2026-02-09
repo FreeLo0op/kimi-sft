@@ -178,6 +178,10 @@ class WhisperEncoder(nn.Module):
 
     def forward(self, audio, kimia_whisper_clip_silence=False):
         if isinstance(audio, torch.Tensor):
+            if audio.dim() == 2: # (B, T)
+                # Handle batch input directly
+                return self.forward_batch(audio, kimia_whisper_clip_silence)
+            
             audio = audio[0]
             if audio.dtype == torch.bfloat16:
                 audio = audio.float().cpu().numpy()
@@ -227,6 +231,68 @@ class WhisperEncoder(nn.Module):
 
         final_audio_embedding = torch.cat(final_audio_embedding, dim=1)
         return final_audio_embedding
+
+    def forward_batch(self, audio_batch, kimia_whisper_clip_silence=False):
+        """
+        Optimized batch forward with Dynamic Padding.
+        audio_batch: (B, T) tensor on GPU
+        """
+        B, L = audio_batch.shape
+        # Constants
+        CHUNK_SAMPLES = 480000 
+        hop_length = 160
+        
+        if kimia_whisper_clip_silence:
+            raise NotImplementedError("Batch processing with clip_silence not optimized yet.")
+        
+        if L <= CHUNK_SAMPLES:
+            # mel = log_mel_spectrogram(audio_batch, n_mels=self.speech_encoder.config.num_mel_bins, padding=0)
+
+            # NOTE: To maintain PCC consistency with original 30s-chunked inference,
+            # we must pad to 30s so the Encoder sees the same global attention context (silence tail).
+            # This sacrifices some speedup for short audios but guarantees numerical equivalence.
+            padding_needed = CHUNK_SAMPLES - L
+            if padding_needed > 0:
+                audio_input = F.pad(audio_batch, (0, padding_needed))
+            else:
+                audio_input = audio_batch
+            mel = log_mel_spectrogram(audio_input, n_mels=self.speech_encoder.config.num_mel_bins, padding=0)
+
+            outputs = self.speech_encoder(mel.to(torch.bfloat16), return_dict=True).last_hidden_state
+        else:
+            # Long audio path (Chunking)
+            # Pad to multiple of 30s
+            pad_len = (CHUNK_SAMPLES - (L % CHUNK_SAMPLES)) % CHUNK_SAMPLES
+            if pad_len > 0:
+                audio_batch_padded = F.pad(audio_batch, (0, pad_len))
+            else:
+                audio_batch_padded = audio_batch
+                
+            # Reshape to (B * NumChunks, 30s)
+            num_chunks = audio_batch_padded.shape[1] // CHUNK_SAMPLES
+            audio_reshaped = audio_batch_padded.reshape(B * num_chunks, CHUNK_SAMPLES)
+            
+            # Process chunks
+            mel = log_mel_spectrogram(audio_reshaped, n_mels=self.speech_encoder.config.num_mel_bins, padding=0)
+            outputs = self.speech_encoder(mel.to(torch.bfloat16), return_dict=True).last_hidden_state
+            
+            # Unpack back to (B, TotalTime, Dim)
+            _, T_out, D_out = outputs.shape
+            outputs = outputs.reshape(B, num_chunks, T_out, D_out)
+            outputs = outputs.flatten(1, 2) # (B, N*1500, D)
+
+        # Enforce valid length (multiple of 4) for both paths
+        # This ensures compatibility with downstream reshape(..., T//4, D*4)
+        token_len = (L - 1) // (hop_length * 8) + 1
+        valid_len = token_len * 4
+        
+        if outputs.shape[1] > valid_len:
+            outputs = outputs[:, :valid_len, :]
+        elif outputs.shape[1] < valid_len:
+            pad_amt = valid_len - outputs.shape[1]
+            outputs = F.pad(outputs, (0, 0, 0, pad_amt))
+            
+        return outputs
 
     @torch.no_grad()
     def tokenize_waveform(self, audio, kimia_whisper_clip_silence=False):
