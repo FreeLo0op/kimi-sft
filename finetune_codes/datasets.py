@@ -1,11 +1,9 @@
 import sys
 from torch.utils.data import Dataset
-from functools import lru_cache
 import torch
 from typing import Dict, List, Optional
 from kimia_infer.utils.special_tokens import instantiate_extra_tokens
 from kimia_infer.utils.data import KimiAContent
-import librosa
 import numpy as np
 import torchaudio
 
@@ -36,7 +34,14 @@ class LazySupervisedDataset(Dataset):
         return len(self.raw_data)
     
     def extract_whisper_feat(self, wav: str):
-        wavform = librosa.load(wav, sr=16000)[0]
+        wav_tensor, sr = torchaudio.load(wav)
+        if sr != 16000:
+            wav_tensor = torchaudio.functional.resample(wav_tensor, sr, 16000)
+        if wav_tensor.ndim > 1 and wav_tensor.shape[0] > 1:
+            wav_tensor = wav_tensor.mean(dim=0, keepdim=True)
+        if wav_tensor.ndim == 2:
+            wav_tensor = wav_tensor.squeeze(0)
+        wavform = wav_tensor.cpu().numpy().astype(np.float32, copy=False)
         # if isinstance(wav, str):
         #     wav = librosa.load(wav, sr=16000)[0]
 
@@ -210,7 +215,6 @@ class LazySupervisedDataset(Dataset):
 
         return ret_msg
 
-    @lru_cache(maxsize=None)
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
 
         task_type = self.raw_data[i]["task_type"]
@@ -281,13 +285,19 @@ class LazySupervisedDataset(Dataset):
 
         # Pad audio features
         if whisper_features:
-            max_feat_len = max(f.shape[0] for f in whisper_features)
+            whisper_tensors = [torch.as_tensor(f, dtype=torch.float32) for f in whisper_features]
+            max_feat_len = max(t.shape[0] for t in whisper_tensors)
             padded_features = []
-            for feat in whisper_features:
+            for feat in whisper_tensors:
                 pad_len = max_feat_len - feat.shape[0]
-                padded_feat = np.pad(feat, (0, pad_len), 'constant', constant_values=0)
+                if feat.dim() == 1:
+                    padded_feat = torch.nn.functional.pad(feat, (0, pad_len), value=0.0)
+                elif feat.dim() == 2:
+                    padded_feat = torch.nn.functional.pad(feat, (0, 0, 0, pad_len), value=0.0)
+                else:
+                    raise ValueError(f"Unsupported whisper feature ndim: {feat.dim()}")
                 padded_features.append(padded_feat)
-            whisper_input_feature_tensor = torch.tensor(np.array(padded_features), dtype=torch.float32)
+            whisper_input_feature_tensor = torch.stack(padded_features, dim=0)
         else:
             whisper_input_feature_tensor = torch.empty(0)
 

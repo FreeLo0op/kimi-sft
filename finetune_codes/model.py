@@ -7,6 +7,7 @@ from transformers import AutoModelForCausalLM
 from huggingface_hub import snapshot_download
 
 from kimia_infer.models.tokenizer.whisper_Lv3.whisper import WhisperEncoder
+from .configuration_moonshot_kimia import KimiAudioConfig
 from .modeling_kimia import MoonshotKimiaForCausalLM
 
 

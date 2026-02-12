@@ -49,8 +49,19 @@ if [ -z ${NODE_RANK+x} ]; then
 else
     # 多节点模式
     NNODES=2
-    MASTER_ADDR="10.198.67.221"  # Set the IP address (or hostname) of the master node
+    MASTER_ADDR="10.198.67.73"  # Set the IP address (or hostname) of the master node
     MASTER_PORT=6001
+fi
+
+# Bind NCCL/GLOO to the route interface used for master communication.
+# This reduces random multi-NIC route drift in multi-node training.
+if [ "$NNODES" -gt 1 ]; then
+    IFACE=$(ip route get "$MASTER_ADDR" 2>/dev/null | awk '/dev/ {for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')
+    if [ -n "$IFACE" ]; then
+        export NCCL_SOCKET_IFNAME="$IFACE"
+        export GLOO_SOCKET_IFNAME="$IFACE"
+        echo "Using network interface for distributed comm: $IFACE"
+    fi
 fi
 
 MODEL="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B" # Set the path if you do not want to load from huggingface directly
@@ -60,8 +71,9 @@ PRETRAINED_MODEL_PATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-mode
 # ATTENTION: specify the path to your training data, which should be a json file consisting of a list of conversations.
 # See the section for finetuning in README for more information.
 DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/train_30_semantic_codes.json"
+# DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/eval/eval_30_semantic_codes.json"
 DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/eval/eval_30_semantic_codes.json"
-output_dir="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE1_MODEL"
+output_dir="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE1_MODEL_0211"
 batch_size=8
 model_max_length=1024
 
@@ -95,10 +107,10 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --gradient_accumulation_steps 8 \
     --eval_strategy "steps" \
     --save_strategy "steps" \
-    --eval_steps 3000 \
-    --save_steps 3000 \
-    --save_total_limit 2000 \
-    --learning_rate 1e-6 \
+    --eval_steps 4000 \
+    --save_steps 2000 \
+    --save_total_limit 1000 \
+    --learning_rate 1e-5 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
     --warmup_ratio 0.2 \

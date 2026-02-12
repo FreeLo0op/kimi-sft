@@ -40,6 +40,17 @@ else
     MASTER_PORT=6001
 fi
 
+# Bind NCCL/GLOO to the route interface used for master communication.
+# This reduces random multi-NIC route drift in multi-node training.
+if [ "$NNODES" -gt 1 ]; then
+    IFACE=$(ip route get "$MASTER_ADDR" 2>/dev/null | awk '/dev/ {for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')
+    if [ -n "$IFACE" ]; then
+        export NCCL_SOCKET_IFNAME="$IFACE"
+        export GLOO_SOCKET_IFNAME="$IFACE"
+        echo "Using network interface for distributed comm: $IFACE"
+    fi
+fi
+
 MODEL="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B" # Set the path if you do not want to load from huggingface directly
 
 DISTRIBUTED_ARGS="

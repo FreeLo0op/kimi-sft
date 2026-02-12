@@ -1,11 +1,9 @@
 import os
-import numpy as np
 from typing import List, Dict
 import torch
 import torchaudio
 from loguru import logger
 from transformers import AutoTokenizer
-import time
 from concurrent.futures import ThreadPoolExecutor
 import contextlib
 
@@ -184,10 +182,13 @@ class KimiAPromptManager:
         return output_list
 
     def _process_batch_audios(self, chats_list: List[List[Dict]]):
+        if not chats_list:
+            return
+
         # 1. Collect all audio tasks
         audio_tasks = [] #(chat_idx, msg_idx, content)
         for i, chats in enumerate(chats_list):
-            # Input must contain text and audio, and audio is the sencond element
+            # Input must contain text and audio, and audio is the second element.
             audio_path = chats[-1]["content"]
             audio_tasks.append((i, 1, audio_path))
 
@@ -197,13 +198,11 @@ class KimiAPromptManager:
         for _, _, content in audio_tasks:
             wav = self._load_audio(content)
             audio_tensor.append(wav)
+        if not audio_tensor:
+            return
 
         # 3. Parallel Tokenize (GLM4) & Extract Whisper Feature
         
-        # CUDA Events for accurate GPU timing (Async)
-        start_evt_whisper = torch.cuda.Event(enable_timing=True)
-        end_evt_whisper = torch.cuda.Event(enable_timing=True)
-
         def _run_glm4(stream):
             ctx = torch.cuda.stream(stream) if stream else contextlib.nullcontext()
             with ctx:
@@ -399,8 +398,8 @@ class KimiAPromptManager:
             assistant_start_msg = self.tokenize_message(
                     message={
                         "role": "assistant",
-                    "message_type": None,
-                },
+                        "message_type": None,
+                    },
                 tokenize_role=True,
                 has_ct_token=False,
                 has_msg_end_token=False,
@@ -435,10 +434,6 @@ class KimiAPromptManager:
 
         pad_token = self.extra_tokens.pad if hasattr(self.extra_tokens, "pad") else self.text_tokenizer.pad_token_id
 
-        input_ids_batch = []
-        text_input_ids_batch = []
-        is_continuous_mask_batch = []
-        
         all_whisper_features = []
         for feat_list in whisper_features:
             for feat in feat_list:
@@ -453,16 +448,16 @@ class KimiAPromptManager:
         batch_text_input_ids = torch.full((batch_size, max_text_input_ids_len), pad_token, dtype=text_input_ids_list[0].dtype, device=device)
         
         for i in range(batch_size):
-            # Left Pad input_ids
+            # Right Pad input_ids (Consistent with Training)
             width_audio = input_ids_list[i].shape[1]
             if width_audio > 0:
-                batch_input_ids[i, -width_audio:] = input_ids_list[i].squeeze(0)
-                batch_is_continuous_mask[i, -width_audio:] = is_continuous_mask_list[i].squeeze(0)
+                batch_input_ids[i, :width_audio] = input_ids_list[i].squeeze(0)
+                batch_is_continuous_mask[i, :width_audio] = is_continuous_mask_list[i].squeeze(0)
             
-            # Left Pad text_input_ids
+            # Right Pad text_input_ids
             width_text = text_input_ids_list[i].shape[1]
             if width_text > 0:
-                batch_text_input_ids[i, -width_text:] = text_input_ids_list[i].squeeze(0)
+                batch_text_input_ids[i, :width_text] = text_input_ids_list[i].squeeze(0)
         
         # Attention Mask
         attention_mask = (batch_input_ids != pad_token).long()
@@ -476,14 +471,19 @@ class KimiAPromptManager:
         )
 
     def get_batch_prompt(
-        self, chats_list: List[List[Dict]], output_type: str = "text", add_assistant_start_msg: bool = True
+        self,
+        chats_list: List[List[Dict]],
+        output_type: str = "text",
+        add_assistant_start_msg: bool = True,
     ) -> BatchKimiAContent:
-        # Pre-process audios in batch
+        # Fast path: preprocess audios in batch for higher throughput.
         self._process_batch_audios(chats_list)
-        
-        contents = []
-        for chats in chats_list:
-            content = self.get_prompt(chats, output_type=output_type, add_assistant_start_msg=add_assistant_start_msg)
-            contents.append(content)
-        
+        contents = [
+            self.get_prompt(
+                chats,
+                output_type=output_type,
+                add_assistant_start_msg=add_assistant_start_msg,
+            )
+            for chats in chats_list
+        ]
         return self.collate_content(contents)

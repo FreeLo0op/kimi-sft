@@ -164,7 +164,7 @@ def make_supervised_data_module(
 
 def compute_loss(outputs, labels, num_items_in_batch=None):
     # remove audio loss
-    text_logits, audio_logits = outputs.logits
+    text_logits = outputs.logits[0]
     audio_labels, text_labels, audio_loss_mask, text_loss_mask = labels
     # audio_loss = torch.nn.functional.cross_entropy(audio_logits.view(-1, audio_logits.shape[-1]), audio_labels.view(-1), reduction="none")
     # audio_loss = (audio_loss * audio_loss_mask.view(-1)).sum() / (audio_loss_mask.view(-1).sum() + 1e-4)

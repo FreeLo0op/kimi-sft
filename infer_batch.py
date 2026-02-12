@@ -1,6 +1,4 @@
 import os
-import sys
-import json
 import time
 import librosa
 import warnings
@@ -8,12 +6,11 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from kimia_infer.api.kimia import KimiAudio
-import torch
 
 warnings.filterwarnings("ignore")
 
 sampling_params = {
-    "audio_temperature": 0.0, # Greedy
+    "audio_temperature": 0.0,
     "audio_top_k": 1,
     "text_temperature": 0.0,
     "text_top_k": 1,
@@ -48,29 +45,30 @@ def load_audio(file:str):
         audio_dict[key] = audio_path
     return audio_dict
 
-def infer_statistic(rtf_list: list, infer_time_list: list, total_duration: float, statistic_fo:str):
-    if not rtf_list: return
-    n_samples = len(rtf_list)
+def infer_statistic(infer_time_list: list, batch_sizes: list, total_duration: float, statistic_fo:str):
+    if not infer_time_list:
+        print("No inference records collected, skip statistics.")
+        return
+
+    n_batches = len(infer_time_list)
+    n_samples = int(sum(batch_sizes))
     total_infer_time = sum(infer_time_list)  # ms
 
-    overall_rtf = round(total_infer_time / total_duration, 4) if total_duration > 0 else 0
     qps = round(n_samples / (total_infer_time / 1000), 4) if total_infer_time > 0 else 0
-    avg_infer_time = round(total_infer_time / n_samples, 4)
+    avg_infer_time = round(total_infer_time / n_samples, 4) if n_samples > 0 else 0
 
     percentiles = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 99]
     infer_time_percentiles = np.round(np.percentile(infer_time_list, percentiles), 4)
-    rtf_percentiles = np.round(np.percentile(rtf_list, percentiles), 4)
 
     df = pd.DataFrame({
         'Percentile': percentiles,
-        'RTF': rtf_percentiles,
         'Inference Time (ms)': infer_time_percentiles
     })
     print("\nInference Statistics:")
     print(f"Total Samples: {n_samples}")
+    print(f"Total Batches: {n_batches}")
     print(f"Total Inference Time (ms): {total_infer_time:.2f}")
     print(f"Total Audio Duration (ms): {total_duration:.2f}")
-    print(f"Overall RTF: {overall_rtf}")
     print(f"QPS: {qps} it/s")
     print(f"Average Inference Time per Sample (ms): {avg_infer_time}")
     print("\nPercentile Statistics:")
@@ -79,19 +77,25 @@ def infer_statistic(rtf_list: list, infer_time_list: list, total_duration: float
 
 def batch_inference(model:KimiAudio, batch_data: list, max_new_tokens:int=1) -> tuple[list, list]:
     # batch_data: list of (input_text, input_audio) tuples
-    chats_batch = []
-    for input_text, input_audio in batch_data:
-        if input_audio is None:
-            messages = [{"role": "user", "message_type": "text", "content": input_text}]
-        else:
-            messages = [
+    chats_batch = [
+        (
+            [{"role": "user", "message_type": "text", "content": input_text}]
+            if input_audio is None
+            else [
                 {"role": "user", "message_type": "text", "content": input_text},
                 {"role": "user", "message_type": "audio", "content": input_audio},
             ]
-        chats_batch.append(messages)
+        )
+        for input_text, input_audio in batch_data
+    ]
     
     # model.generate should now support batch
-    wavs, texts, probs = model.generate(chats_batch, **sampling_params, output_type="text", max_new_tokens=max_new_tokens)
+    texts, probs = model.generate(
+        chats_batch,
+        **sampling_params,
+        output_type="text",
+        max_new_tokens=max_new_tokens,
+    )
     
     # texts is list of string sentences (detokenized)
     return texts, probs
@@ -126,7 +130,7 @@ def main_single_dataset_batch(
     fo = open(fo_path, "w", encoding="utf-8")
 
     total_duration = 0 # ms
-    rtf_list, infer_time_list = [], []
+    infer_time_list, batch_sizes = [], []
     
     # Prepare all data items
     all_data = []
@@ -137,9 +141,6 @@ def main_single_dataset_batch(
         if infer_audio_content is None: continue
         
         input_text = infer_text_content.format(ref_text)
-        # Note: librosa.get_duration requires file IO enabled if passing filename. 
-        # For speed, we might want to skip duration check here if not strictly needed before inference.
-        # But we need it for statistics.
         try:
             duration = (librosa.get_duration(filename=infer_audio_content, sr=16000)) * 1000  # ms
         except Exception as e:
@@ -153,12 +154,13 @@ def main_single_dataset_batch(
             'duration': duration
         })
 
-    # Sort data by duration to minimize padding overhead
-    # This significantly improves QPS by grouping similar length audios together
     print("Sorting data by duration...")
-    # all_data.sort(key=lambda x: x['duration'])
-    print(f'Max duration: {max([item["duration"] for item in all_data])} ms')
-    # sys.exit(0)
+    all_data.sort(key=lambda x: x['duration'])
+    if not all_data:
+        print("No valid samples found, exiting.")
+        fo.close()
+        return
+    print(f"Max duration: {max([item['duration'] for item in all_data])} ms")
     # Warmup
     print("Warming up model with 10 samples...")
     warmup_samples = all_data[:10]
@@ -177,25 +179,16 @@ def main_single_dataset_batch(
         batch_inputs = [(item['input_text'], item['input_audio']) for item in batch_items]
         
         start_time = time.time()
-        # Batch inference call
-        try:
-            texts, text_probs = batch_inference(model, batch_inputs, max_new_tokens=1)
-        except Exception as e:
-            print(f"Error in batch inference: {e}")
-            continue
+        texts, text_probs = batch_inference(model, batch_inputs, max_new_tokens=1)
 
         end_time = time.time()
-        
         batch_infer_time = (end_time - start_time) * 1000 # ms
-        avg_infer_time = batch_infer_time / len(batch_items)
-
+        infer_time_list.append(batch_infer_time)
+        batch_sizes.append(len(batch_items))
         for j, item in enumerate(batch_items):
             duration = item['duration']
             total_duration += duration
-            infer_time_list.append(avg_infer_time) 
-            if duration > 0:
-                rtf_list.append(avg_infer_time / duration)
-            
+
             text = texts[j]
             probs = text_probs[j]
             score = text.strip()
@@ -206,17 +199,45 @@ def main_single_dataset_batch(
         fo.flush()
 
     fo.close()
-    infer_statistic(rtf_list, infer_time_list, total_duration, statistic_fo)
+    infer_statistic(infer_time_list, batch_sizes, total_duration, statistic_fo)
+
+def main_asr():
+    infer_data='/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/noise_asr_testdataset.csv'
+    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE1_MODEL/infer_cpkt9k'
+    # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B-Instruct'
+
+    infer_text_content = "Please transcribe the following audio:"
+    model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:0')
+    data = pd.read_csv(infer_data, sep='\t', usecols=['wavname', 'text', 'wavpath'])
+    data = data[data['wavname'].isin(['17676960006241458168243156193280', '17654562927241448774227352285184'])]
+    batch_size = 1
+    for i in tqdm(range(0, len(data), batch_size), desc="ASR Batch Inference"):
+        batch_data = data.iloc[i : i + batch_size]
+        batch_inputs = []
+        for _, row in batch_data.iterrows():
+            input_text = infer_text_content
+            input_audio = row['wavpath']
+            batch_inputs.append((input_text, input_audio))
+        
+        texts, _ = batch_inference(model, batch_inputs, max_new_tokens=100)
+        for j, (_, row) in enumerate(batch_data.iterrows()):
+            print(f"Audio: {row['wavname']}, Reference: {row['text']}, ASR Output: {texts[j]}")
+            # print(f'{row["wavname"]}\t{row["text"]}\t{texts[j]}')
+
 
 if __name__ == "__main__":
     model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.3/infer_model'
+    # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE1_MODEL/infer_cpkt9k'
+
     infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/next/tal-k12/test/label_sent_score'
-    infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/next/tal-k12/test/label_snt_score_batch2'
-    infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/label_snt_score_ad'
+    # infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/next/tal-k12/test/label_snt_score_batch2'
+    # infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/label_snt_score_ad'
     # infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/next/tal-k12/test/label_snt_score_merged'
 
-    
+
     # You can change batch_size here
-    # main_single_dataset_batch(model_path, infer_file, batch_size=8)
-    main_single_dataset_batch(model_path, infer_file, batch_size=8, audio_file='/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/wavpath')
+    main_single_dataset_batch(model_path, infer_file, batch_size=5)
+    # main_single_dataset_batch(model_path, infer_file, batch_size=8, audio_file='/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/wavpath')
+
+    # main_asr()
 

@@ -14,7 +14,7 @@ SAMPLE_RATE = 16000
 N_FFT = 400
 N_MELS = 120
 HOP_LENGTH = 160
-CHUNK_LENGTH = 30 # change 30 seconds to 5 seconds
+CHUNK_LENGTH = 30
 N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE  # 480000 samples in a 30-second chunk
 
 
@@ -96,7 +96,6 @@ def pad_or_trim(array, length: int = N_SAMPLES, *, axis: int = -1):
 
     return array
 
-
 @lru_cache(maxsize=None)
 def mel_filters(device, n_mels: int = 128) -> torch.Tensor:
     """
@@ -160,7 +159,12 @@ def log_mel_spectrogram(
     mel_spec = filters @ magnitudes
 
     log_spec = torch.clamp(mel_spec, min=1e-10).log10()
-    log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
+    # Batch-safe normalization: avoid cross-sample coupling when audio is batched.
+    if log_spec.dim() == 3:
+        sample_peak = log_spec.amax(dim=(-2, -1), keepdim=True)
+        log_spec = torch.maximum(log_spec, sample_peak - 8.0)
+    else:
+        log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
     log_spec = (log_spec + 4.0) / 4.0
     return log_spec
 
@@ -238,7 +242,6 @@ class WhisperEncoder(nn.Module):
         audio_batch: (B, T) tensor on GPU
         """
         B, L = audio_batch.shape
-        # Constants
         CHUNK_SAMPLES = 480000 
         hop_length = 160
         
@@ -246,17 +249,14 @@ class WhisperEncoder(nn.Module):
             raise NotImplementedError("Batch processing with clip_silence not optimized yet.")
         
         if L <= CHUNK_SAMPLES:
-            # mel = log_mel_spectrogram(audio_batch, n_mels=self.speech_encoder.config.num_mel_bins, padding=0)
+            mel = log_mel_spectrogram(audio_batch, n_mels=self.speech_encoder.config.num_mel_bins, padding=0)
 
-            # NOTE: To maintain PCC consistency with original 30s-chunked inference,
-            # we must pad to 30s so the Encoder sees the same global attention context (silence tail).
-            # This sacrifices some speedup for short audios but guarantees numerical equivalence.
-            padding_needed = CHUNK_SAMPLES - L
-            if padding_needed > 0:
-                audio_input = F.pad(audio_batch, (0, padding_needed))
-            else:
-                audio_input = audio_batch
-            mel = log_mel_spectrogram(audio_input, n_mels=self.speech_encoder.config.num_mel_bins, padding=0)
+            # padding_needed = CHUNK_SAMPLES - L
+            # if padding_needed > 0:
+            #     audio_input = F.pad(audio_batch, (0, padding_needed))
+            # else:
+            #     audio_input = audio_batch
+            # mel = log_mel_spectrogram(audio_input, n_mels=self.speech_encoder.config.num_mel_bins, padding=0)
 
             outputs = self.speech_encoder(mel.to(torch.bfloat16), return_dict=True).last_hidden_state
         else:
