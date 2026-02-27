@@ -5,6 +5,7 @@ from torch import nn
 from subprocess import CalledProcessError, run, Popen, PIPE
 import os
 import time
+import logging
 from functools import lru_cache
 from typing import Optional, Union
 from .modeling_whisper import WhisperModel
@@ -16,6 +17,8 @@ N_MELS = 120
 HOP_LENGTH = 160
 CHUNK_LENGTH = 30
 N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE  # 480000 samples in a 30-second chunk
+
+logger = logging.getLogger(__name__)
 
 
 def load_bytesio_audio(content, sr: int = SAMPLE_RATE):
@@ -149,10 +152,33 @@ def log_mel_spectrogram(
 
     if device is not None:
         audio = audio.to(device)
+
+    audio = audio.float().contiguous()
+    if not torch.isfinite(audio).all():
+        logger.warning("Found non-finite values in audio input; replacing with zeros before STFT.")
+        audio = torch.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
+
+    if audio.shape[-1] < N_FFT:
+        audio = F.pad(audio, (0, N_FFT - audio.shape[-1]))
     if padding > 0:
         audio = F.pad(audio, (0, padding))
-    window = torch.hann_window(N_FFT).to(audio.device)
-    stft = torch.stft(audio, N_FFT, HOP_LENGTH, window=window, return_complex=True)
+
+    window = torch.hann_window(N_FFT, device=audio.device, dtype=audio.dtype)
+    try:
+        stft = torch.stft(audio, N_FFT, HOP_LENGTH, window=window, return_complex=True)
+    except RuntimeError as e:
+        if "CUFFT_INTERNAL_ERROR" not in str(e):
+            raise
+        logger.warning("CUFFT_INTERNAL_ERROR in torch.stft, retrying once on CUDA.")
+        try:
+            stft = torch.stft(audio.contiguous(), N_FFT, HOP_LENGTH, window=window, return_complex=True)
+        except RuntimeError as retry_e:
+            if "CUFFT_INTERNAL_ERROR" not in str(retry_e):
+                raise
+            logger.warning("CUFFT retry failed, fallback to CPU STFT for this batch.")
+            audio_cpu = audio.detach().cpu()
+            window_cpu = torch.hann_window(N_FFT, device=audio_cpu.device, dtype=audio_cpu.dtype)
+            stft = torch.stft(audio_cpu, N_FFT, HOP_LENGTH, window=window_cpu, return_complex=True).to(audio.device)
     magnitudes = stft[..., :-1].abs() ** 2
 
     filters = mel_filters(audio.device, n_mels)

@@ -56,6 +56,7 @@ def infer_statistic(infer_time_list: list, batch_sizes: list, total_duration: fl
 
     qps = round(n_samples / (total_infer_time / 1000), 4) if total_infer_time > 0 else 0
     avg_infer_time = round(total_infer_time / n_samples, 4) if n_samples > 0 else 0
+    avg_infer_time_per_batch = round(np.mean(infer_time_list), 4)
 
     percentiles = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 99]
     infer_time_percentiles = np.round(np.percentile(infer_time_list, percentiles), 4)
@@ -71,6 +72,7 @@ def infer_statistic(infer_time_list: list, batch_sizes: list, total_duration: fl
     print(f"Total Audio Duration (ms): {total_duration:.2f}")
     print(f"QPS: {qps} it/s")
     print(f"Average Inference Time per Sample (ms): {avg_infer_time}")
+    print(f"Average Inference Time per Batch (ms): {avg_infer_time_per_batch}")
     print("\nPercentile Statistics:")
     print(df.to_string(index=False))
     df.to_csv(statistic_fo, index=True, encoding='utf-8', sep='\t')
@@ -119,11 +121,10 @@ def main_single_dataset_batch(
     audio_dict = load_audio(audio_file)
     shared_key = set(text_dict.keys()) & set(audio_dict.keys())
     # Sort keys to ensure deterministic order
-    sorted_keys = sorted(list(shared_key))
-    
-    print(f"Found {len(sorted_keys)} samples with both text and audio.")
+    # sorted_keys = sorted(list(shared_key))
+    # print(f"Found {len(sorted_keys)} samples with both text and audio.")
 
-    fo_path = os.path.join(model_path, 'infer_res_batch', os.path.basename(infer_file))
+    fo_path = os.path.join(model_path, 'infer_res', os.path.basename(infer_file))
     statistic_fo = fo_path + '.statistic.tsv'
     if not os.path.exists(os.path.dirname(fo_path)):
         os.makedirs(os.path.dirname(fo_path), exist_ok=True)
@@ -135,7 +136,7 @@ def main_single_dataset_batch(
     # Prepare all data items
     all_data = []
     print("Pre-loading data durations...")
-    for key in tqdm(sorted_keys):
+    for key in tqdm(shared_key):
         ref_text = text_dict[key]
         infer_audio_content = audio_dict.get(key, None)
         if infer_audio_content is None: continue
@@ -143,6 +144,7 @@ def main_single_dataset_batch(
         input_text = infer_text_content.format(ref_text)
         try:
             duration = (librosa.get_duration(filename=infer_audio_content, sr=16000)) * 1000  # ms
+            # if duration > 30000: continue # 30s
         except Exception as e:
             print(f"Error loading audio {infer_audio_content}: {e}")
             continue
@@ -180,8 +182,8 @@ def main_single_dataset_batch(
         
         start_time = time.time()
         texts, text_probs = batch_inference(model, batch_inputs, max_new_tokens=1)
-
         end_time = time.time()
+
         batch_infer_time = (end_time - start_time) * 1000 # ms
         infer_time_list.append(batch_infer_time)
         batch_sizes.append(len(batch_items))
@@ -195,22 +197,27 @@ def main_single_dataset_batch(
             score_code = str(SCORE_CODE_MAP.get(score, -1))
             
             fo.write(f"{item['key']}\t{score_code}\t{probs}\n")
-        
         fo.flush()
-
     fo.close()
     infer_statistic(infer_time_list, batch_sizes, total_duration, statistic_fo)
 
-def main_asr():
+def main_asr_noise():
     infer_data='/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/noise_asr_testdataset.csv'
-    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE1_MODEL/infer_cpkt9k'
+    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE2_MODEL/infer_model_ckpt40000'
+    # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE1_MODEL_0211/infer_model_ckpt23208'
     # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B-Instruct'
+
+    fo_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE2_MODEL/infer_model_ckpt40000/infer_res/noise_asr_testdataset.csv'
+    save_dir = os.path.dirname(fo_path)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+    asr_fo = open(fo_path, "w", encoding="utf-8")
 
     infer_text_content = "Please transcribe the following audio:"
     model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:0')
     data = pd.read_csv(infer_data, sep='\t', usecols=['wavname', 'text', 'wavpath'])
-    data = data[data['wavname'].isin(['17676960006241458168243156193280', '17654562927241448774227352285184'])]
-    batch_size = 1
+    # data = data[data['wavname'].isin(['17676960006241458168243156193280', '17654562927241448774227352285184'])]
+    batch_size = 4
     for i in tqdm(range(0, len(data), batch_size), desc="ASR Batch Inference"):
         batch_data = data.iloc[i : i + batch_size]
         batch_inputs = []
@@ -221,23 +228,55 @@ def main_asr():
         
         texts, _ = batch_inference(model, batch_inputs, max_new_tokens=100)
         for j, (_, row) in enumerate(batch_data.iterrows()):
-            print(f"Audio: {row['wavname']}, Reference: {row['text']}, ASR Output: {texts[j]}")
+            # print(f"Audio: {row['wavname']}, Reference: {row['text']}, ASR Output: {texts[j]}")
             # print(f'{row["wavname"]}\t{row["text"]}\t{texts[j]}')
+            asr_fo.write(f"{row['wavname']}\t{row['text']}\t{texts[j]}\n")
+
+def main_asr(
+    model_path:str,
+    wavpath_file:str,
+    fo_path:str
+    ):
+    batch_size = 4
+    infer_text_content = "Please transcribe the following audio."
+    # infer_text_content = "请将下面的音频内容转写成文字。"
+    model = KimiAudio(model_path=model_path, load_detokenizer=False, device=f'cuda:0')
+    asr_fo = open(fo_path, "w", encoding="utf-8")
+    wavpath_dict = load_audio(wavpath_file)
+    keys = list(wavpath_dict.keys())
+    for i in tqdm(range(0, len(keys), batch_size), desc="ASR Batch Inference"):
+        batch_keys = keys[i : i + batch_size]
+        batch_inputs = [(infer_text_content, wavpath_dict[key]) for key in batch_keys]
+        texts, _ = batch_inference(model, batch_inputs, max_new_tokens=100)
+        for j, key in enumerate(batch_keys):
+            asr_fo.write(f"{key}\t{texts[j]}\n")
+    asr_fo.close()
 
 
 if __name__ == "__main__":
     model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/PaMLLM/PaMLLM_kimi_v3.3/infer_model'
-    # model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE1_MODEL/infer_cpkt9k'
+    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE1_MODEL_0211/infer_model_ckpt23208'
+    model_path = '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE2_MODEL/infer_model_ckpt40000'
 
     infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/next/tal-k12/test/label_sent_score'
-    # infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/next/tal-k12/test/label_snt_score_batch2'
-    # infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/label_snt_score_ad'
+    infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/next/tal-k12/test/label_snt_score_batch4'
+    infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/label_snt_score_ad'
     # infer_file = '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/api_data/next/tal-k12/test/label_snt_score_merged'
 
-
     # You can change batch_size here
-    main_single_dataset_batch(model_path, infer_file, batch_size=5)
-    # main_single_dataset_batch(model_path, infer_file, batch_size=8, audio_file='/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/wavpath')
+    # main_single_dataset_batch(model_path, infer_file, batch_size=5)
+    main_single_dataset_batch(model_path, infer_file, batch_size=5, audio_file='/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/audio_detect/test/wavpath')
 
-    # main_asr()
+    # main_asr(
+    #     model_path,
+    #     '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/en/open_source/LibriSpeech/test/wavpath',
+    #     '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE2_MODEL/infer_model_ckpt40000/infer_res/libri_asr.csv'
+    # )
 
+    # main_asr(
+    #     model_path,
+    #     '/mnt/pfs_l2/jieti_team/SFT/hupeng/data/cn/open_source/aishell/test/test_aishell1/wavpath',
+    #     '/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE2_MODEL/infer_model_ckpt40000/infer_res/aishell_asr.csv'
+    # )
+
+    # main_asr_noise()

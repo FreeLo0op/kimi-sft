@@ -1,7 +1,9 @@
 import sys
+import os
+import json
 from torch.utils.data import Dataset
 import torch
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 from kimia_infer.utils.special_tokens import instantiate_extra_tokens
 from kimia_infer.utils.data import KimiAContent
 import numpy as np
@@ -10,37 +12,83 @@ import torchaudio
 class LazySupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, raw_data_list, whisper_model, text_tokenizer, max_len: int, kimia_token_offset: int):
+    def __init__(
+        self,
+        raw_data_list: Union[List[Dict], str],
+        whisper_model,
+        text_tokenizer,
+        max_len: int,
+        kimia_token_offset: int,
+    ):
         super(LazySupervisedDataset, self).__init__()
         self.whisper_model = whisper_model
         self.max_len = max_len
-        # print('DEBUG max_len: {}'.format(max_len))
-
-        print("There are {} samples in the dataset".format(len(raw_data_list)))
-        # self.whisper_model = whisper_model
-
-        print(f"Loading text tokenizer")
         self.text_tokenizer = text_tokenizer
 
         self.extra_tokens = instantiate_extra_tokens(self.text_tokenizer)
 
         self.pad_token = self.extra_tokens.pad
         self.kimia_token_offset = kimia_token_offset
-        self.raw_data = raw_data_list
+        self.raw_data = None
+        self.raw_data_path: Optional[str] = None
+        self.line_offsets: Optional[List[int]] = None
+        self._data_fp = None
 
-        self.cached_data_dict = {}
+        if isinstance(raw_data_list, str):
+            if not os.path.isfile(raw_data_list):
+                raise FileNotFoundError(f"Dataset file not found: {raw_data_list}")
+            self.raw_data_path = raw_data_list
+            self.line_offsets = self._build_line_offsets(raw_data_list)
+            print("There are {} samples in the dataset".format(len(self.line_offsets)))
+        else:
+            self.raw_data = raw_data_list
+            print("There are {} samples in the dataset".format(len(self.raw_data)))
+
+    @staticmethod
+    def _build_line_offsets(path: str) -> List[int]:
+        offsets: List[int] = []
+        cur = 0
+        with open(path, "rb") as f:
+            for line in f:
+                if line.strip():
+                    offsets.append(cur)
+                cur += len(line)
+        return offsets
+
+    def _ensure_data_fp(self):
+        if self._data_fp is None:
+            # One file handle per dataloader worker process.
+            self._data_fp = open(self.raw_data_path, "r", encoding="utf-8")
+
+    def _get_raw_sample(self, i: int) -> Dict:
+        if self.raw_data is not None:
+            return self.raw_data[i]
+        self._ensure_data_fp()
+        self._data_fp.seek(self.line_offsets[i])
+        line = self._data_fp.readline()
+        return json.loads(line)
 
     def __len__(self):
-        return len(self.raw_data)
+        if self.raw_data is not None:
+            return len(self.raw_data)
+        return len(self.line_offsets)
     
     def extract_whisper_feat(self, wav: str):
-        wav_tensor, sr = torchaudio.load(wav)
+        try:
+            wav_tensor, sr = torchaudio.load(wav)
+        except Exception as e:
+            raise RuntimeError(f"Failed to load audio file: {wav}, error: {e}") from e
         if sr != 16000:
             wav_tensor = torchaudio.functional.resample(wav_tensor, sr, 16000)
         if wav_tensor.ndim > 1 and wav_tensor.shape[0] > 1:
             wav_tensor = wav_tensor.mean(dim=0, keepdim=True)
         if wav_tensor.ndim == 2:
             wav_tensor = wav_tensor.squeeze(0)
+        # if not torch.isfinite(wav_tensor).all():
+        #     print(f"[WARN] Non-finite waveform values found, sanitizing: {wav}")
+        #     wav_tensor = torch.nan_to_num(wav_tensor, nan=0.0, posinf=0.0, neginf=0.0)
+        # if wav_tensor.shape[-1] < 400:
+        #     wav_tensor = torch.nn.functional.pad(wav_tensor, (0, 400 - wav_tensor.shape[-1]), value=0.0)
         wavform = wav_tensor.cpu().numpy().astype(np.float32, copy=False)
         # if isinstance(wav, str):
         #     wav = librosa.load(wav, sr=16000)[0]
@@ -216,9 +264,9 @@ class LazySupervisedDataset(Dataset):
         return ret_msg
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
-
-        task_type = self.raw_data[i]["task_type"]
-        conversation = self.raw_data[i]["conversation"]
+        raw_item = self._get_raw_sample(i)
+        task_type = raw_item["task_type"]
+        conversation = raw_item["conversation"]
 
         output_type = "text" if task_type == "understanding" else "both"
 
@@ -247,6 +295,13 @@ class LazySupervisedDataset(Dataset):
         )
 
         return ret
+
+    def __del__(self):
+        if self._data_fp is not None:
+            try:
+                self._data_fp.close()
+            except Exception:
+                pass
 
     def collate_fn(self, batch):
         if not batch:

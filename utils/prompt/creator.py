@@ -113,6 +113,8 @@ def main_base(
         return
     
     for dataset in os.listdir(dataset_dir):
+        if 'snt_pa' not in dataset:
+            continue
         if dataset.endswith('json'):
             dataset_path = os.path.join(dataset_dir, dataset)
             counter = 0
@@ -228,6 +230,6 @@ if __name__ == "__main__":
     # )
 
     main_base(
-        dataset_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/CPT_v1_Stage1/train',
-        output_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/train_30.jsonl'
+        dataset_dir='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/multi_task/CPT_v1_Stage2/eval',
+        output_path='/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/eval/eval_30_part2.jsonl'
     )

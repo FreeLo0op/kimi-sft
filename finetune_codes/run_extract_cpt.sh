@@ -33,18 +33,18 @@ echo "================================"
 
 export CUDA_VISIBLE_DEVICES="$GPU_IDS"
 
-# /mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/spilt_one_data
+# /mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/train
 INPUT_FILES=(
-    '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/spilt_one_data/split_aa'
-    '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/spilt_one_data/split_ab'
-    # '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/spilt_one_data/split_ac'
-    # '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/spilt_one_data/split_ad'
-    # '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/spilt_one_data/split_ae'
-    # '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/spilt_one_data/split_af'
-    # '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/spilt_one_data/split_ag'
-    # '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/spilt_one_data/split_ah'
-    # '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/spilt_one_data/split_ai'
-    # '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/spilt_one_data/split_aj'
+    '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/train/split_aa.jsonl'
+    '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/train/split_ab.jsonl'
+    '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/train/split_ac.jsonl'
+    '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/train/split_ad.jsonl'
+    '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/train/split_ae.jsonl'
+    '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/train/split_af.jsonl'
+    '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/train/split_ag.jsonl'
+    '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/train/split_ah.jsonl'
+    '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/train/split_ai.jsonl'
+    '/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/train/split_aj.jsonl'
 )
 for INPUT_FILE in "${INPUT_FILES[@]}"; do
     OUTPUT_FILE="${INPUT_FILE%.*}_semantic_codes.json"

@@ -116,38 +116,41 @@ def make_supervised_data_module(
     """Make dataset and collator for supervised fine-tuning."""
     dataset_cls = LazySupervisedDataset
     rank0_print("Loading data...")
+    if not os.path.isfile(data_args.train_data_path):
+        raise FileNotFoundError(f"train_data_path not found: {data_args.train_data_path}")
 
-    with open(data_args.train_data_path, "r") as f:
-        lines = f.readlines()
-        all_data = [json.loads(line) for line in lines] # * 3  # 3倍数据增强
+    def _load_jsonl(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return [json.loads(line) for line in f if line.strip()]
 
     # Process evaluation data
     eval_data = None
+    train_data = data_args.train_data_path
     if data_args.eval_data_path:
         if os.path.isdir(data_args.eval_data_path):
             eval_data = {}
             for eval_dataset_file in os.listdir(data_args.eval_data_path):
-                if not eval_dataset_file.endswith('.json'):
+                if not (eval_dataset_file.endswith(".json") or eval_dataset_file.endswith(".jsonl")):
                     continue
-                eval_dataset_name = eval_dataset_file.replace('.json', '')
-                with open(os.path.join(data_args.eval_data_path, eval_dataset_file), "r") as f:
-                    lines = f.readlines()
-                    eval_data[eval_dataset_name] = [json.loads(line) for line in lines]
+                eval_dataset_name = eval_dataset_file.rsplit(".", 1)[0]
+                eval_data[eval_dataset_name] = _load_jsonl(
+                    os.path.join(data_args.eval_data_path, eval_dataset_file)
+                )
         elif os.path.isfile(data_args.eval_data_path):
-            with open(data_args.eval_data_path, "r") as f:
-                lines = f.readlines()
-                eval_data = [json.loads(line) for line in lines]
-
-        train_data = all_data
+            eval_data = _load_jsonl(data_args.eval_data_path)
     elif data_args.eval_ratio > 0:
+        rank0_print(
+            "eval_ratio > 0 requires loading full train data into memory for split; "
+            "this can be memory-heavy on multi-rank training."
+        )
+        all_data = _load_jsonl(data_args.train_data_path)
         eval_data = all_data[:int(len(all_data) * data_args.eval_ratio)]
         train_data = all_data[int(len(all_data) * data_args.eval_ratio):]
         assert len(eval_data) > 0, "No evaluation data found"
         assert len(train_data) > 0, "No training data found"
-    else:
-        train_data = all_data
 
-    random.shuffle(train_data)
+    if isinstance(train_data, list):
+        random.shuffle(train_data)
     train_dataset = dataset_cls(train_data, whisper_model=whisper_model, text_tokenizer=text_tokenizer, max_len=max_len, kimia_token_offset=kimia_token_offset)
 
     if isinstance(eval_data, dict):
@@ -217,7 +220,7 @@ def train():
         **model_load_kwargs
     )
 
-    model.freeze_prefix(['model.layers', 'model.mimo_layers', 'model.embed_tokens', 'model.norm', 'lm_head', 'mimo_output', 'model.mimo_norm'])
+    # model.freeze_prefix(['model.layers', 'model.mimo_layers', 'model.embed_tokens', 'model.norm', 'lm_head', 'mimo_output', 'model.mimo_norm'])
     model.print_trainable_summary()
     # sys.exit(1)
 

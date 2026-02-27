@@ -49,7 +49,7 @@ if [ -z ${NODE_RANK+x} ]; then
 else
     # 多节点模式
     NNODES=2
-    MASTER_ADDR="10.198.67.73"  # Set the IP address (or hostname) of the master node
+    MASTER_ADDR="10.198.67.38"  # Set the IP address (or hostname) of the master node
     MASTER_PORT=6001
 fi
 
@@ -66,15 +66,15 @@ fi
 
 MODEL="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B" # Set the path if you do not want to load from huggingface directly
 
-PRETRAINED_MODEL_PATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/llm-base-models/Kimi-Audio-7B"
+PRETRAINED_MODEL_PATH="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE1_MODEL_0211"
 
 # ATTENTION: specify the path to your training data, which should be a json file consisting of a list of conversations.
 # See the section for finetuning in README for more information.
-DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/train/train_30_semantic_codes.json"
+DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/train/train_semantic_codes.json"
 # DATA_TRAIN="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/eval/eval_30_semantic_codes.json"
-DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage1/eval/eval_30_semantic_codes.json"
-output_dir="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE1_MODEL_0211"
-batch_size=8
+DATA_EVAL="/mnt/pfs_l2/jieti_team/SFT/hupeng/llm_data/kimi_style/CPT_v1_Stage2/eval/eval_semantic_codes.json"
+output_dir="/mnt/pfs_l2/jieti_team/SFT/hupeng/resources/Base_Model/Kimi-PA-Base-v3/CPT_STAGE2_MODEL"
+batch_size=4
 model_max_length=1024
 
 echo "PRETRAINED_MODEL_PATH: $PRETRAINED_MODEL_PATH"
@@ -100,17 +100,17 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --eval_ratio 0.05 \
     --bf16 True \
     --output_dir $output_dir \
-    --num_train_epochs 1 \
+    --num_train_epochs 2 \
     --per_device_train_batch_size $batch_size \
     --per_device_eval_batch_size $batch_size \
     --model_max_length $model_max_length \
     --gradient_accumulation_steps 8 \
     --eval_strategy "steps" \
     --save_strategy "steps" \
-    --eval_steps 4000 \
-    --save_steps 2000 \
+    --eval_steps 5000 \
+    --save_steps 5000 \
     --save_total_limit 1000 \
-    --learning_rate 1e-5 \
+    --learning_rate 1e-6 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
     --warmup_ratio 0.2 \
